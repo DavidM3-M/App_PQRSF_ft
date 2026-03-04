@@ -6,6 +6,8 @@ import {
   UsuarioAPI,
   LoginResponse,
   formatApiError,
+  resolveDepId,
+  resolveDepName,
 } from "../lib/api";
 
 // ── Modelo de usuario normalizado para el frontend ──────────────────────
@@ -30,6 +32,8 @@ export interface Usuario {
   ciudad: string;
   /** Rol derivado: controla el acceso a rutas protegidas. */
   rol: "admin" | "usuario" | "area";
+  /** Códigos de roles asignados por el sistema de roles (ej. ["ADMIN"]). */
+  roles?: string[];
   /** ID de la dependencia asignada (solo rol "area"). */
   dependencyId?: string;
   /** Nombre de la dependencia asignada (solo rol "area"). */
@@ -60,8 +64,14 @@ export interface Usuario {
  * @param d - Payload completo de la respuesta del endpoint /api/login/.
  * @returns Objeto `Usuario` normalizado (rol siempre "admin" si is_staff=true).
  */
+/** Determina si el usuario tiene capacidades de administrador. */
+function hasAdminPrivilege(is_staff: boolean, roles?: string[]): boolean {
+  return is_staff || (roles?.includes("ADMIN") ?? false);
+}
+
 function mapLoginUser(d: LoginResponse): Usuario {
-  const rol: Usuario["rol"] = d.is_staff ? "admin" : "usuario";
+  const esAdmin = hasAdminPrivilege(d.is_staff, d.roles);
+  const rol: Usuario["rol"] = esAdmin ? "admin" : "usuario";
   return {
     id: d.user_id,
     nombre: d.nombre,
@@ -73,6 +83,7 @@ function mapLoginUser(d: LoginResponse): Usuario {
     telefono: d.telefono ?? "",
     ciudad: d.ciudad ?? "",
     rol,
+    roles: d.roles,
     dependencyId: d.dependency?.id,
     dependencyName: d.dependency?.name,
     is_staff: d.is_staff,
@@ -81,8 +92,9 @@ function mapLoginUser(d: LoginResponse): Usuario {
 
 function mapApiUser(u: UsuarioAPI): Usuario {
   const is_staff = u.is_staff;
-  const hasDep = !!u.dependency; // determina si el usuario pertenece a un área
-  const rol: Usuario["rol"] = is_staff ? "admin" : hasDep ? "area" : "usuario";
+  const esAdmin = hasAdminPrivilege(is_staff, u.roles);
+  const hasDep = !!u.dependency;
+  const rol: Usuario["rol"] = esAdmin ? "admin" : hasDep ? "area" : "usuario";
   return {
     id: u.id,
     nombre: u.nombre,
@@ -94,8 +106,9 @@ function mapApiUser(u: UsuarioAPI): Usuario {
     telefono: u.telefono ?? "",
     ciudad: u.ciudad ?? "",
     rol,
-    dependencyId: u.dependency?.id,
-    dependencyName: u.dependency?.name,
+    roles: u.roles,
+    dependencyId: resolveDepId(u.dependency),
+    dependencyName: resolveDepName(u.dependency),
     is_staff,
   };
 }
@@ -150,14 +163,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       apiGetPerfil()
         .then((u) => {
           const mapped = mapApiUser(u);
-          // Preservar is_staff del localStorage si era true, igual que en el flujo
-          // de login. Evita que una inconsistencia puntual del backend degrade el
+          // Preservar is_staff y rol de admin del localStorage si era admin, igual que en el
+          // flujo de login. Evita que una inconsistencia puntual del backend degrade el
           // rol de admin → area o usuario en cada recarga de página.
           const mergedIsStaff = storedUser.is_staff || mapped.is_staff;
+          // Fusionar codigos de roles: los del perfil fresco + los almacenados (si los hay)
+          const storedRoles: string[] = storedUser.roles ?? [];
+          const freshRoles: string[] = u.roles ?? [];
+          const mergedRoles = [...new Set([...storedRoles, ...freshRoles])];
+          const mergedIsAdmin = hasAdminPrivilege(mergedIsStaff, mergedRoles);
           const merged: Usuario = {
             ...mapped,
             is_staff: mergedIsStaff,
-            rol: mergedIsStaff ? "admin" : mapped.rol,
+            rol: mergedIsAdmin ? "admin" : mapped.rol,
+            roles: mergedRoles.length > 0 ? mergedRoles : mapped.roles,
           };
           setUsuario(merged);
           localStorage.setItem("usuario", JSON.stringify(merged));
@@ -192,24 +211,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const loginData = await apiLogin(email, password); // 1. Auth + tokens + datos usuario
 
-      if (loginData.is_staff) {
+      const loginIsAdmin = hasAdminPrivilege(loginData.is_staff, loginData.roles);
+
+      if (loginIsAdmin) {
         // Admin: rol determinado desde el login, no necesitamos otra llamada
         const mapped = mapLoginUser(loginData);
         setUsuario(mapped);
         localStorage.setItem("usuario", JSON.stringify(mapped));
         // Refresco en background para rellenar campos opcionales del perfil.
-        // IMPORTANTE: si el endpoint /perfil devuelve is_staff=false (inconsistencia
-        // del backend), se preserva is_staff=true del login para evitar que una
-        // condición de carrera degrade el rol de admin a area.
+        // IMPORTANTE: se preservan is_staff y roles del login para evitar que una
+        // inconsistencia puntual del backend degrade el rol de admin.
         apiGetPerfil()
           .then(p => {
             const full = mapApiUser(p);
-            // Preservar is_staff del login si el perfil lo reporta inconsistente
+            // Fusionar privilegios: si el login los reportó, se mantienen
             const mergedIsStaff = loginData.is_staff || full.is_staff;
+            const mergedRoles = [...new Set([...(loginData.roles ?? []), ...(p.roles ?? [])])];
+            const mergedIsAdmin = hasAdminPrivilege(mergedIsStaff, mergedRoles);
             const merged: Usuario = {
               ...full,
               is_staff: mergedIsStaff,
-              rol: mergedIsStaff ? "admin" : full.rol,
+              rol: mergedIsAdmin ? "admin" : full.rol,
+              roles: mergedRoles.length > 0 ? mergedRoles : full.roles,
             };
             setUsuario(merged);
             localStorage.setItem("usuario", JSON.stringify(merged));
@@ -217,8 +240,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .catch(() => { /* ignorar: el usuario ya está seteado */ });
       } else {
         // No-admin: necesitamos apiGetPerfil para obtener la dependencia (rol "area" vs "usuario")
+        // También fusionamos los roles del login por si el endpoint de perfil no los devuelve.
         const perfil = await apiGetPerfil();
-        const mapped = mapApiUser(perfil);
+        const mergedRoles = [...new Set([...(loginData.roles ?? []), ...(perfil.roles ?? [])])];
+        const mapped = mapApiUser({ ...perfil, roles: mergedRoles });
         setUsuario(mapped);
         localStorage.setItem("usuario", JSON.stringify(mapped));
       }

@@ -13,10 +13,10 @@ import {
   ArrowUpCircle, Activity, MessageSquare,
 } from "lucide-react";
 import {
-  apiListPQRS, apiListDependencies, apiListUsers,
-  apiAssignPQRS, apiRespondPQRS, apiUpdateEstado, apiEscalatePQRS,
-  apiGetActivities, apiGetResponses, apiGetEscalations,
-  PqrsAPI, Dependency, UsuarioAPI, PqrsResponseAPI, PQRSActivity, PQRSEscalation,
+  apiListPQRS, apiListDependencies, apiListUsers, apiListAllAssignments,
+  apiAssignPQRS, apiPatchPQRS, apiRespondPQRS, apiUpdateEstado, apiEscalatePQRS,
+  apiGetActivities, apiGetResponses, apiGetEscalations, apiGetAssignments, apiGetPQRS,
+  PqrsAPI, Dependency, UsuarioAPI, PqrsResponseAPI, PQRSActivity, PQRSEscalation, AssignmentAPI,
   PQRS_STATUS_LABEL, PQRS_TYPE_LABEL, PQRS_PRIORITY_LABEL,
   formatApiError,
 } from "../lib/api";
@@ -79,11 +79,20 @@ export function AdminDashboard() {
   const [showFiltros, setShowFiltros] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>("respond");
 
+  // assign-tab: driven by the form's own dependency field
+  // workload: userId -> active assignment count
+  const [userWorkloadMap, setUserWorkloadMap] = useState<Map<string, number>>(new Map());
+
   // history (lazy loaded per-PQRS)
   const [historyLoading, setHistoryLoading] = useState(false);
   const [responses, setResponses] = useState<PqrsResponseAPI[]>([]);
   const [activities, setActivities] = useState<PQRSActivity[]>([]);
   const [escalations, setEscalations] = useState<PQRSEscalation[]>([]);
+  // active assignment for the selected PQRS
+  const [activeAssignment, setActiveAssignment] = useState<AssignmentAPI | null>(null);
+  const [allAssignments, setAllAssignments] = useState<AssignmentAPI[]>([]);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [assignmentError, setAssignmentError] = useState(false);
 
   const respondForm  = useForm<RespondForm>({ defaultValues: { response_type: "CITIZEN", new_status: "", content: "" } });
   const assignForm   = useForm<AssignForm>({ defaultValues: { responsible_user: "", dependency: "", notes: "" } });
@@ -91,48 +100,123 @@ export function AdminDashboard() {
 
   const cargarDatos = useCallback(async () => {
     setLoading(true);
-    try {
-      const [pqrsRes, sinAsignarRes, depsRes, usersRes] = await Promise.all([
-        apiListPQRS({ page_size: 200 }),
-        // Consulta dedicada para obtener IDs sin asignación activa (filtro server-side)
-        apiListPQRS({ sin_asignar: true, page_size: 200 }),
-        apiListDependencies(true),
-        apiListUsers({ page_size: 200 }),
-      ]);
-      const items = Array.isArray(pqrsRes) ? pqrsRes : (pqrsRes as any).results ?? [];
+    // Use allSettled so a single failing endpoint doesn't blank out everything else.
+    const [pqrsResult, sinAsignarResult, depsResult, usersResult, workloadResult] = await Promise.allSettled([
+      apiListPQRS({ page_size: 200 }),
+      apiListPQRS({ sin_asignar: true, page_size: 200 }),
+      apiListDependencies(true),
+      apiListUsers({ page_size: 200 }),
+      apiListAllAssignments({ is_active: true, page_size: 500 }),
+    ]);
+
+    if (pqrsResult.status === "fulfilled") {
+      const items = Array.isArray(pqrsResult.value) ? pqrsResult.value : (pqrsResult.value as any).results ?? [];
       setPqrsList(items.sort((a: PqrsAPI, b: PqrsAPI) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ));
-      const sinAsignarItems: PqrsAPI[] = Array.isArray(sinAsignarRes)
-        ? sinAsignarRes
-        : (sinAsignarRes as any).results ?? [];
-      setSinAsignarIds(new Set(sinAsignarItems.map((p: PqrsAPI) => p.id)));
-      setDependencies(Array.isArray(depsRes) ? depsRes : (depsRes as any).results ?? []);
-      setAllUsers(Array.isArray(usersRes) ? usersRes : (usersRes as any).results ?? []);
-    } catch (e) {
-      toast.error("Error al cargar datos", { description: formatApiError(e) });
-    } finally {
-      setLoading(false);
+    } else {
+      toast.error("Error al cargar PQRS", { description: formatApiError(pqrsResult.reason) });
     }
+
+    if (sinAsignarResult.status === "fulfilled") {
+      const sinAsignarItems: PqrsAPI[] = Array.isArray(sinAsignarResult.value)
+        ? sinAsignarResult.value
+        : (sinAsignarResult.value as any).results ?? [];
+      setSinAsignarIds(new Set(sinAsignarItems.map((p: PqrsAPI) => p.id)));
+    }
+    // sinAsignar failing is non-critical — leave existing set as fallback.
+
+    if (depsResult.status === "fulfilled") {
+      setDependencies(Array.isArray(depsResult.value) ? depsResult.value : (depsResult.value as any).results ?? []);
+    } else {
+      toast.error("Error al cargar dependencias", { description: formatApiError(depsResult.reason) });
+    }
+
+    if (usersResult.status === "fulfilled") {
+      setAllUsers(Array.isArray(usersResult.value) ? usersResult.value : (usersResult.value as any).results ?? []);
+    } else {
+      toast.error("Error al cargar usuarios", { description: formatApiError(usersResult.reason) });
+    }
+
+    if (workloadResult.status === "fulfilled") {
+      const assignments: AssignmentAPI[] = Array.isArray(workloadResult.value)
+        ? workloadResult.value
+        : (workloadResult.value as any).results ?? [];
+      const map = new Map<string, number>();
+      for (const a of assignments) {
+        const uid = typeof a.responsible_user === "string" ? a.responsible_user : a.responsible_user?.id;
+        if (uid) map.set(uid, (map.get(uid) ?? 0) + 1);
+      }
+      setUserWorkloadMap(map);
+    }
+    // workload load failure is non-critical — no toast needed
+
+    setLoading(false);
   }, []);
 
   const loadHistory = useCallback(async (pqrsId: string) => {
     setHistoryLoading(true);
     try {
-      const [resRes, actRes, escRes] = await Promise.all([
+      const [resRes, actRes, escRes, assRes] = await Promise.all([
         apiGetResponses(pqrsId),
         apiGetActivities(pqrsId),
         apiGetEscalations(pqrsId),
+        apiGetAssignments(pqrsId),
       ]);
-      setResponses((resRes as any).results ?? []);
-      setActivities((actRes as any).results ?? []);
-      setEscalations((escRes as any).results ?? []);
+      setResponses(((resRes as any).results ?? []).slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      setActivities(((actRes as any).results ?? []).slice().sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      setEscalations(((escRes as any).results ?? []).slice().sort((a: any, b: any) => new Date(b.escalated_at ?? b.created_at).getTime() - new Date(a.escalated_at ?? a.created_at).getTime()));
+      const list: AssignmentAPI[] = (Array.isArray(assRes) ? assRes : (assRes as any).results ?? [])
+        .slice().sort((a: AssignmentAPI, b: AssignmentAPI) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setAllAssignments(list);
+      const active = list.find(a => a.is_active) ?? list[0] ?? null;
+      setActiveAssignment(active);
     } catch (e) {
       toast.error("Error al cargar historial", { description: formatApiError(e) });
     } finally {
       setHistoryLoading(false);
     }
   }, []);
+
+  const loadAssignment = (p: PqrsAPI) => {
+    setActiveAssignment(null);
+    setAssignmentError(false);
+    setAssignmentLoading(true);
+    apiGetAssignments(p.id)
+      .then(res => {
+        const list: AssignmentAPI[] = (Array.isArray(res) ? res : (res as any).results ?? [])
+          .slice().sort((a: AssignmentAPI, b: AssignmentAPI) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        // eslint-disable-next-line no-console
+        console.debug("[AdminDashboard] assignments raw:", list);
+        const active = list.find(a => a.is_active) ?? list[0] ?? null;
+        setAllAssignments(list);
+        setActiveAssignment(active);
+        // If assignments endpoint returned nothing but PQRS object has dependency, refresh via detail
+        if (!active && !p.dependency) {
+          apiGetPQRS(p.id)
+            .then(fresh => {
+              if (fresh.dependency) {
+                setSelected(prev => prev && prev.id === fresh.id ? { ...prev, dependency: fresh.dependency } : prev);
+              }
+            })
+            .catch(() => { /* best-effort */ });
+        }
+      })
+      .catch(err => {
+        // eslint-disable-next-line no-console
+        console.error("[AdminDashboard] error loading assignment:", err);
+        setAssignmentError(true);
+        // Still try from PQRS detail as fallback
+        apiGetPQRS(p.id)
+          .then(fresh => {
+            if (fresh.dependency) {
+              setSelected(prev => prev && prev.id === fresh.id ? { ...prev, dependency: fresh.dependency } : prev);
+            }
+          })
+          .catch(() => { /* best-effort */ });
+      })
+      .finally(() => setAssignmentLoading(false));
+  };
 
   const openDetail = (p: PqrsAPI) => {
     setSelected(p);
@@ -143,6 +227,9 @@ export function AdminDashboard() {
     setResponses([]);
     setActivities([]);
     setEscalations([]);
+    setActiveAssignment(null);
+    setAllAssignments([]);
+    loadAssignment(p);
   };
 
   const switchTab = (tab: DetailTab) => {
@@ -210,15 +297,36 @@ export function AdminDashboard() {
     const pqrsId = selected.id;
     let newStatus = selected.status;
     try {
+      // Resolve the effective dependency: explicit form value takes priority,
+      // otherwise fall back to the responsible user's own dependency.
+      const responsibleUser = allUsers.find(u => u.id === data.responsible_user) ?? null;
+      const userDepId = responsibleUser
+        ? (typeof responsibleUser.dependency === "object"
+            ? responsibleUser.dependency?.id
+            : responsibleUser.dependency as string | undefined)
+        : undefined;
+      const effectiveDepId = data.dependency || userDepId || undefined;
+
       const assignPayload: Parameters<typeof apiAssignPQRS>[0] = {
         pqrs: pqrsId,
         responsible_user: data.responsible_user,
-        dependency: data.dependency || undefined,
+        dependency: effectiveDepId,
       };
       if (data.notes.trim()) assignPayload.notes = data.notes.trim();
 
       // POST /api/pqrs/assign/ → guarda la asignación en la BD
       await apiAssignPQRS(assignPayload);
+
+      // Siempre sincronizar pqrs.dependency para que el filtro ?dependency=
+      // en AreaDashboard devuelva las PQRS correctas.
+      if (effectiveDepId) {
+        try {
+          await apiPatchPQRS(pqrsId, { dependency: effectiveDepId });
+        } catch (patchErr) {
+          // best-effort: el assignment ya fue creado; solo el campo denormalizado falló
+          console.warn("[AdminDashboard] no se pudo sincronizar pqrs.dependency:", patchErr);
+        }
+      }
 
       // Cambiar estado a "En Proceso" si estaba en "Radicado"
       if (selected.status === "RAD") {
@@ -232,12 +340,7 @@ export function AdminDashboard() {
         }
       }
 
-      // NOTA: GET /api/pqrs/{id}/ NO devuelve el campo `dependency` en su respuesta.
-      // El área se almacena en el modelo Assignment (separado del PQRS).
-      // Parcheamos el objeto local con el área seleccionada en el formulario para
-      // que la pantalla lo muestre de inmediato sin esperar otro request.
-      const depObj = dependencies.find(d => d.id === data.dependency) ?? null;
-      const responsibleUser = allUsers.find(u => u.id === data.responsible_user) ?? null;
+      const depObj = dependencies.find(d => d.id === effectiveDepId) ?? null;
       const patched: PqrsAPI = {
         ...selected,
         dependency: depObj,
@@ -245,6 +348,24 @@ export function AdminDashboard() {
       };
       setSelected(patched);
       setPqrsList(prev => prev.map(p => p.id === pqrsId ? patched : p));
+      // Update active assignment info locally so Área row and history reflect immediately
+      const newAssignment: AssignmentAPI = {
+        id: crypto.randomUUID?.() ?? String(Date.now()),
+        pqrs: pqrsId,
+        responsible_user: responsibleUser ?? data.responsible_user,
+        dependency: depObj,
+        assigned_by_user: "",
+        is_active: true,
+        created_at: new Date().toISOString(),
+        notes: data.notes ?? "",
+      };
+      setActiveAssignment(newAssignment);
+      // mark previous assignments as inactive and prepend the new one
+      setAllAssignments(prev => [
+        newAssignment,
+        ...prev.map(a => ({ ...a, is_active: false })),
+      ]);
+      setAssignmentError(false);
 
       toast.success(`PQRS asignada correctamente${
         depObj ? ` a ${depObj.name}` : ""
@@ -289,6 +410,20 @@ export function AdminDashboard() {
   // sinAsignar viene del servidor (filtro server-side), no de p.dependency
   const sinAsignar    = sinAsignarIds.size;
   const nonStaffUsers = allUsers.filter(u => !u.is_staff);
+
+  /** Resolves dependency name using the loaded `dependencies` list as ground truth. */
+  const depNameFor = (dep: Dependency | string | null | undefined): string | null => {
+    if (!dep) return null;
+    if (typeof dep !== "string") return dep.name;
+    return dependencies.find(d => d.id === dep)?.name ?? null;
+  };
+
+  const selectedDepId = assignForm.watch("dependency");
+  const filteredAssignUsers = allUsers.filter(u => {
+    if (!selectedDepId) return true;
+    const uid = typeof u.dependency === "string" ? u.dependency : u.dependency?.id ?? "";
+    return uid === selectedDepId;
+  });
   // El endpoint de lista devuelve `submitter` (string); el detalle puede devolver user/anonymous_submitter
   const contactName = (p: PqrsAPI) => {
     if (p.user) return `${p.user.nombre} ${p.user.apellido}`.trim();
@@ -475,9 +610,40 @@ export function AdminDashboard() {
                       <span className="text-gray-500">Estado</span>
                       <StatusBadge status={selected.status} />
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-start">
                       <span className="text-gray-500">Área</span>
-                      <span>{selected.dependency?.name ?? "Sin asignar"}</span>
+                      {assignmentLoading ? (
+                        <span className="text-gray-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Cargando...</span>
+                      ) : assignmentError && !selected.dependency ? (
+                        <button
+                          className="text-xs text-red-400 underline"
+                          onClick={() => selected && loadAssignment(selected)}
+                        >Error al cargar — reintentar</button>
+                      ) : (() => {
+                        // resolve area: prefer active assignment dependency, fall back to pqrs.dependency
+                        const depFromAssignment = activeAssignment?.dependency;
+                        const depName =
+                          depFromAssignment && typeof depFromAssignment === "object"
+                            ? (depFromAssignment as Dependency).name
+                            : typeof depFromAssignment === "string"
+                              ? (dependencies.find(d => d.id === depFromAssignment)?.name ?? depFromAssignment)
+                              : selected.dependency?.name;
+                        // resolve responsible user
+                        const ru = activeAssignment?.responsible_user;
+                        const ruName = ru
+                          ? typeof ru === "object"
+                            ? `${(ru as UsuarioAPI).nombre} ${(ru as UsuarioAPI).apellido}`.trim()
+                            : (allUsers.find(u => u.id === ru)?.nombre ?? ru)
+                          : null;
+                        return depName || ruName ? (
+                          <span className="text-right">
+                            {depName && <span className="text-blue-700 font-medium">{depName}</span>}
+                            {ruName && <span className="block text-xs text-gray-500">({ruName})</span>}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 italic">Sin asignar</span>
+                        );
+                      })()}
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Ciudadano</span>
@@ -549,21 +715,48 @@ export function AdminDashboard() {
                   {activeTab === "assign" && (
                     <form onSubmit={assignForm.handleSubmit(onAsignar)} className="space-y-3">
                       <div>
-                        <Label className="text-sm">Responsable *</Label>
-                        <select className="w-full border rounded-md px-3 py-2 text-sm mt-1 bg-white" {...assignForm.register("responsible_user", { required: "Seleccione un responsable" })}>
-                          <option value="">Seleccionar responsable...</option>
-                          {allUsers.map(u => (
-                            <option key={u.id} value={u.id}>{u.nombre} {u.apellido} — {u.email}</option>
-                          ))}
-                        </select>
-                        {assignForm.formState.errors.responsible_user && <p className="text-red-500 text-xs mt-1">{assignForm.formState.errors.responsible_user.message}</p>}
-                      </div>
-                      <div>
                         <Label className="text-sm">Área responsable (opcional)</Label>
-                        <select className="w-full border rounded-md px-3 py-2 text-sm mt-1 bg-white" {...assignForm.register("dependency")}>
+                        <select
+                          className="w-full border rounded-md px-3 py-2 text-sm mt-1 bg-white"
+                          {...assignForm.register("dependency", {
+                            onChange: () => assignForm.setValue("responsible_user", "")
+                          })}
+                        >
                           <option value="">Sin área específica...</option>
                           {dependencies.map(d => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
                         </select>
+                        {userWorkloadMap.size > 0 && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            {selectedDepId
+                              ? `${filteredAssignUsers.length} usuario${filteredAssignUsers.length !== 1 ? "s" : ""} en esta área — ordenados por carga`
+                              : "Responsables ordenados por carga de asignaciones activas"}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label className="text-sm">Responsable *</Label>
+                        <select className="w-full border rounded-md px-3 py-2 text-sm mt-1 bg-white" {...assignForm.register("responsible_user", { required: "Seleccione un responsable" })}>
+                          <option value="">Seleccionar responsable...</option>
+                          {[...filteredAssignUsers]
+                            .sort((a, b) => (userWorkloadMap.get(a.id) ?? 0) - (userWorkloadMap.get(b.id) ?? 0))
+                            .map(u => {
+                              const load = userWorkloadMap.get(u.id) ?? 0;
+                              const loadLabel = userWorkloadMap.size > 0
+                                ? (load === 0 ? " — sin asignaciones" : ` — ${load} asignación${load !== 1 ? "es" : ""}`)
+                                : "";
+                              const area = !selectedDepId ? (depNameFor(u.dependency) ?? "Sin área") + " · " : "";
+                              return (
+                                <option key={u.id} value={u.id}>
+                                  {u.nombre} {u.apellido} · {area}{u.email}{loadLabel}
+                                </option>
+                              );
+                            })}
+                        </select>
+                        {assignForm.formState.errors.responsible_user && <p className="text-red-500 text-xs mt-1">{assignForm.formState.errors.responsible_user.message}</p>}
+                        {filteredAssignUsers.length === 0 && selectedDepId && (
+                          <p className="text-amber-600 text-xs mt-1">No hay usuarios en esta área.</p>
+                        )}
                       </div>
                       <div>
                         <Label className="text-sm">Notas de asignación (opcional)</Label>
@@ -629,6 +822,46 @@ export function AdminDashboard() {
                         </div>
                       ) : (
                         <>
+                          {/* Assignments */}
+                          <div>
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 mb-2">
+                              <Building2 className="w-3 h-3" /> Asignaciones ({allAssignments.length})
+                            </h4>
+                            {allAssignments.length === 0
+                              ? <p className="text-xs text-gray-400 italic">Sin asignaciones registradas.</p>
+                              : allAssignments.map(a => {
+                                  const depField = a.dependency;
+                                  const depObj = depField && typeof depField === "object"
+                                    ? depField as Dependency
+                                    : dependencies.find(d => d.id === depField) ?? null;
+                                  const ruField = a.responsible_user;
+                                  const ruObj = ruField && typeof ruField === "object"
+                                    ? ruField as UsuarioAPI
+                                    : allUsers.find(u => u.id === ruField) ?? null;
+                                  const assignedByField = a.assigned_by_user;
+                                  const assignedByObj = assignedByField && typeof assignedByField === "object"
+                                    ? assignedByField as UsuarioAPI
+                                    : allUsers.find(u => u.id === assignedByField) ?? null;
+                                  return (
+                                    <div key={a.id} className={`border rounded-lg p-3 mb-2 text-xs ${
+                                      a.is_active ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200 opacity-70"
+                                    }`}>
+                                      <div className="flex justify-between items-center mb-1">
+                                        <span className={`font-medium px-1.5 py-0.5 rounded ${
+                                          a.is_active ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                                        }`}>{a.is_active ? "Activa" : "Histórica"}</span>
+                                        <span className="text-gray-400">{formatDateTime(a.created_at)}</span>
+                                      </div>
+                                      {depObj && <p className="text-gray-700">Área: <span className="font-medium">{depObj.name}</span>{depObj.code ? ` (${depObj.code})` : ""}</p>}
+                                      {ruObj && <p className="text-gray-700">Responsable: <span className="font-medium">{ruObj.nombre} {ruObj.apellido}</span></p>}
+                                      {assignedByObj && <p className="text-gray-400 mt-0.5">Asignado por: {assignedByObj.nombre} {assignedByObj.apellido}</p>}
+                                      {a.notes && <p className="text-gray-600 italic mt-1">"{a.notes}"</p>}
+                                    </div>
+                                  );
+                                })
+                            }
+                          </div>
+
                           {/* Responses */}
                           <div>
                             <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 mb-2">
@@ -649,7 +882,13 @@ export function AdminDashboard() {
                                       <span className="text-xs text-gray-400">{formatDateTime(r.created_at)}</span>
                                     </div>
                                     <p className="text-gray-700 whitespace-pre-wrap text-xs">{r.content}</p>
-                                    <p className="text-xs text-gray-400 mt-1">Por: {r.responded_by?.nombre} {r.responded_by?.apellido}</p>
+                                    <p className="text-xs text-gray-400 mt-1">Por: {(() => {
+                                      const raw = r.responded_by ?? r.user ?? r.created_by;
+                                      if (!raw) return "—";
+                                      if (typeof raw === "object") return `${(raw as UsuarioAPI).nombre ?? ""} ${(raw as UsuarioAPI).apellido ?? ""}`.trim() || (raw as UsuarioAPI).email || (raw as UsuarioAPI).username || "—";
+                                      const found = allUsers.find(u => u.id === raw);
+                                      return found ? `${found.nombre} ${found.apellido}`.trim() : raw;
+                                    })()}</p>
                                   </div>
                                 ))
                             }

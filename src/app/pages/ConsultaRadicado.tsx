@@ -269,7 +269,7 @@ export function ConsultaRadicado() {
                     {responses.map((r) => (
                       <div key={r.id} className="rounded-lg bg-blue-50 border border-blue-200 p-4">
                         <div className="flex justify-between text-xs text-blue-700 mb-2">
-                          <span>{r.responded_by?.nombre} {r.responded_by?.apellido}</span>
+                          <span>{typeof r.responded_by === 'object' ? `${r.responded_by?.nombre} ${r.responded_by?.apellido}` : r.responded_by}</span>
                           <span>{formatDateTime(r.created_at)}</span>
                         </div>
                         <p className="text-sm text-blue-900">{r.content}</p>

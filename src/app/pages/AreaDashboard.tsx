@@ -1,3 +1,11 @@
+/**
+ * @file AreaDashboard.tsx
+ * @description Panel de gestión de PQRS asignadas a una dependencia/área institucional.
+ *              Permite al funcionario de área ver, filtrar y responder las PQRS que le
+ *              han sido asignadas, así como actualizar su estado.
+ * @author Sistema PQRS Institucional
+ * @date 2026-03-04
+ */
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router";
@@ -9,36 +17,131 @@ import { Label } from "../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Building2, FileText, Clock, CheckCircle2, AlertCircle, X, User, Calendar, ArrowLeft, Loader2, LayoutDashboard, Search } from "lucide-react";
 import {
-  apiListPQRS, apiRespondPQRS, apiUpdateEstado,
-  PqrsAPI, PQRS_STATUS_LABEL, PQRS_TYPE_LABEL, PQRS_PRIORITY_LABEL,
+  apiListPQRS, apiRespondPQRS, apiUpdateEstado, apiListAllAssignments, apiGetPQRS,
+  PqrsAPI, AssignmentAPI, PQRS_STATUS_LABEL, PQRS_TYPE_LABEL, PQRS_PRIORITY_LABEL,
   formatApiError
 } from "../lib/api";
 import { formatDateTime } from "../lib/utils";
 
+/**
+ * Estructura del formulario de respuesta a una PQRS.
+ *
+ * @property response_text  - Contenido textual de la respuesta o nota interna.
+ * @property response_type  - Tipo de respuesta:
+ *   - `CITIZEN`  → Respuesta dirigida al ciudadano.
+ *   - `FINAL`    → Respuesta final/cierre del caso.
+ *   - `INTERNAL` → Nota interna (no visible para el ciudadano).
+ * @property new_status - Nuevo estado al que se desea mover la PQRS (vacío = sin cambio).
+ */
 interface RespondForm {
   response_text: string;
   response_type: "CITIZEN" | "FINAL" | "INTERNAL";
   new_status: string;
 }
 
+/**
+ * Componente principal del Panel de Área.
+ *
+ * Muestra las PQRS asignadas a la dependencia del usuario autenticado,
+ * ofrece filtrado por estado y un panel lateral para gestionar (responder /
+ * cambiar estado) cada PQRS seleccionada.
+ *
+ * Estrategia de carga de datos:
+ * 1. Se consultan las PQRS cuya `dependency` coincida con la del usuario.
+ * 2. En paralelo, se obtiene la lista de asignaciones activas para capturar
+ *    PQRS que pueden no aparecer en el endpoint principal.
+ * 3. Las PQRS faltantes se recuperan individualmente y se fusionan,
+ *    eliminando duplicados.
+ *
+ * @returns JSX del panel de área responsivo (lista + panel de detalle/respuesta).
+ */
 export function AreaDashboard() {
   const { usuario } = useAuth();
   const navigate = useNavigate();
+
+  /** Lista completa de PQRS asignadas a la dependencia del usuario. */
   const [pqrsList, setPqrsList] = useState<PqrsAPI[]>([]);
+
+  /** PQRS actualmente seleccionada para ver detalle / responder. */
   const [selected, setSelected] = useState<PqrsAPI | null>(null);
+
+  /** Indica si la carga inicial (o recarga) de PQRS está en curso. */
   const [loading, setLoading] = useState(true);
+
+  /** Indica si el envío del formulario de respuesta está en curso. */
   const [submitting, setSubmitting] = useState(false);
+
+  /** Valor del filtro de estado activo (`"todos"` muestra todas). */
   const [filtroEstado, setFiltroEstado] = useState("todos");
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<RespondForm>({
     defaultValues: { response_type: "CITIZEN", new_status: "" },
   });
 
+  /**
+   * Carga (o recarga) todas las PQRS asignadas al área del usuario.
+   *
+   * Utiliza `Promise.allSettled` para ejecutar en paralelo dos consultas:
+   *   - **Primaria**: PQRS filtradas por `dependency` del usuario.
+   *   - **Secundaria**: Asignaciones activas (puede fallar silenciosamente).
+   *
+   * Las PQRS referenciadas en asignaciones pero ausentes de la consulta
+   * primaria se recuperan de forma individual y se incorporan al listado.
+   * El resultado final se desduplicha por `id` y se ordena de más reciente
+   * a más antiguo.
+   *
+   * Memorizado con `useCallback` para evitar re-creaciones innecesarias;
+   * solo cambia si `dependencyId` o `id` del usuario cambian.
+   */
   const cargarPQRS = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiListPQRS({ page_size: 200 });
-      const items: PqrsAPI[] = Array.isArray(res) ? res : (res as any).results ?? [];
+      const depId = usuario?.dependencyId;
+      const userId = usuario?.id;
+
+      // Consulta primaria: PQRS cuya dependencia coincide con la del usuario.
+      // Consulta secundaria: asignaciones activas (fallará silenciosamente si
+      // el endpoint no está disponible gracias a allSettled).
+      const [pqrsResult, assignResult] = await Promise.allSettled([
+        apiListPQRS({ page_size: 200, ...(depId ? { dependency: depId } : {}) }),
+        apiListAllAssignments({ is_active: true, page_size: 500, ...(depId ? { dependency: depId } : {}), ...(userId ? { responsible_user: userId } : {}) }),
+      ]);
+
+      // Normaliza la respuesta paginada o de array directo.
+      const basePqrs: PqrsAPI[] = pqrsResult.status === "fulfilled"
+        ? (Array.isArray(pqrsResult.value) ? pqrsResult.value : (pqrsResult.value as any).results ?? [])
+        : [];
+
+      // Extrae IDs de PQRS referenciadas en asignaciones que no están en basePqrs.
+      const assignmentsList: AssignmentAPI[] = assignResult.status === "fulfilled"
+        ? ((assignResult.value as any).results ?? (Array.isArray(assignResult.value) ? assignResult.value : []))
+        : [];
+      const baseIds = new Set(basePqrs.map(p => p.id));
+      const missingIds = [...new Set(assignmentsList.map(a => a.pqrs).filter(Boolean))]
+        .filter(id => !baseIds.has(id));
+
+      // Recupera individualmente las PQRS faltantes (peticiones en paralelo).
+      const extraPqrs: PqrsAPI[] = missingIds.length
+        ? (await Promise.allSettled(missingIds.map(id => apiGetPQRS(id))))
+            .filter((r): r is PromiseFulfilledResult<PqrsAPI> => r.status === "fulfilled")
+            .map(r => r.value)
+        : [];
+
+      const all = [...basePqrs, ...extraPqrs];
+
+      // Elimina duplicados por id (puede ocurrir si ambas fuentes devuelven el mismo registro).
+      const seen = new Set<string>();
+      const items = all.filter(p => {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
+
+      // Traza de depuración para verificar la composición final del listado.
+      // eslint-disable-next-line no-console
+      console.debug("[AreaDashboard] depId:", depId, "| base:", basePqrs.length, "| assignments:", assignmentsList.length, "| extra:", extraPqrs.length, "| final:", items.length);
+
+      // Ordena de más reciente a más antigua antes de guardar en el estado.
       setPqrsList(items.sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ));
@@ -47,10 +150,17 @@ export function AreaDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [usuario?.dependencyId, usuario?.id]);
 
+  // Dispara la carga de PQRS al montar el componente y cada vez que cambie
+  // la referencia estable de `cargarPQRS` (dependencias del usuario).
   useEffect(() => { cargarPQRS(); }, [cargarPQRS]);
 
+  /**
+   * Bloquea el scroll del body en dispositivos móviles (<1024 px) cuando
+   * hay una PQRS seleccionada y el panel de detalle ocupa toda la pantalla.
+   * El cleanup restaura siempre el scroll al desmontar o al cerrar el panel.
+   */
   useEffect(() => {
     const isMobile = window.innerWidth < 1024;
     if (isMobile && selected) {
@@ -61,22 +171,42 @@ export function AreaDashboard() {
     return () => { document.body.style.overflow = ""; };
   }, [selected]);
 
+  /**
+   * Subconjunto de `pqrsList` que pasa el filtro de estado activo.
+   * Cuando `filtroEstado` es `"todos"` no se aplica ningún filtro.
+   */
   const pqrsFiltradas = pqrsList.filter(p =>
     filtroEstado === "todos" || p.status === filtroEstado
   );
 
+  /**
+   * Manejador del formulario de respuesta.
+   *
+   * Pasos que realiza:
+   * 1. Registra la respuesta/nota interna llamando a `apiRespondPQRS`.
+   * 2. Si se indicó un nuevo estado diferente al actual, llama a `apiUpdateEstado`.
+   * 3. Notifica éxito, limpia el formulario, recarga la lista y cierra el panel.
+   *
+   * En caso de error muestra una notificación `toast` con el detalle del fallo.
+   *
+   * @param data - Datos validados del formulario `RespondForm`.
+   */
   const onResponder = async (data: RespondForm) => {
     if (!selected) return;
     setSubmitting(true);
     try {
+      // Paso 1: enviar la respuesta o nota interna.
       await apiRespondPQRS({ pqrs: selected.id, content: data.response_text, response_type: data.response_type });
+
+      // Paso 2: cambiar estado solo si se seleccionó uno distinto al actual.
       if (data.new_status && data.new_status !== selected.status) {
         await apiUpdateEstado(selected.id, data.new_status as any);
       }
+
       toast.success("Respuesta registrada correctamente");
       reset({ response_type: "CITIZEN", new_status: "" });
-      await cargarPQRS();
-      setSelected(null);
+      await cargarPQRS(); // Recarga el listado para reflejar cambios.
+      setSelected(null);  // Cierra el panel de detalle.
     } catch (e) {
       toast.error("Error al guardar respuesta", { description: formatApiError(e) });
     } finally {
@@ -84,6 +214,19 @@ export function AreaDashboard() {
     }
   };
 
+  /**
+   * Genera una etiqueta (badge) visual coloreada según el estado de la PQRS.
+   *
+   * Mapa de colores por código de estado:
+   * - `RAD` (Radicado)  → Azul
+   * - `PRO` (En Proceso) → Amarillo
+   * - `RES` (Resuelto)  → Verde
+   * - `CER` (Cerrado)   → Gris
+   * - Cualquier otro    → Gris neutro (fallback)
+   *
+   * @param status - Código de estado interno (p.ej. `"RAD"`, `"PRO"`).
+   * @returns Elemento `<span>` con estilos Tailwind y la etiqueta legible.
+   */
   const getStatusBadge = (status: string) => {
     const cfg: Record<string, string> = {
       RAD: "bg-blue-100 text-blue-800",
@@ -98,6 +241,17 @@ export function AreaDashboard() {
     );
   };
 
+  /**
+   * Resuelve el nombre del remitente/ciudadano de una PQRS con la siguiente
+   * jerarquía de fallback:
+   * 1. Usuario registrado → `nombre + apellido`.
+   * 2. Remitente anónimo con nombre → `anonymous_submitter.nombre`.
+   * 3. Campo genérico `submitter` (cadena plana).
+   * 4. Valor por defecto → `"Anónimo"`.
+   *
+   * @param p - Objeto PQRS obtenido de la API.
+   * @returns Nombre legible del remitente.
+   */
   const contactName = (p: PqrsAPI) => {
     if (p.user) return `${p.user.nombre} ${p.user.apellido}`.trim();
     if (p.anonymous_submitter?.nombre) return p.anonymous_submitter.nombre;
@@ -105,15 +259,19 @@ export function AreaDashboard() {
     return sub || "Anónimo";
   };
 
-  const total = pqrsList.length;
-  const rad = pqrsList.filter(p => p.status === "RAD").length;
-  const pro = pqrsList.filter(p => p.status === "PRO").length;
-  const res = pqrsList.filter(p => p.status === "RES" || p.status === "CER").length;
+  // ── Contadores para las tarjetas de estadísticas ─────────────────────────
+  const total = pqrsList.length;                                              // Total de PQRS asignadas al área.
+  const rad   = pqrsList.filter(p => p.status === "RAD").length;             // En estado Radicado.
+  const pro   = pqrsList.filter(p => p.status === "PRO").length;             // En estado En Proceso.
+  const res   = pqrsList.filter(p => p.status === "RES" || p.status === "CER").length; // Resueltas o Cerradas.
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+
+        {/* ====================================================
+            CABECERA: identidad del área y navegación rápida
+        ==================================================== */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
@@ -126,6 +284,7 @@ export function AreaDashboard() {
               </p>
             </div>
           </div>
+          {/* Botones de navegación rápida hacia otras secciones del sistema */}
           {/* Quick-nav */}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline"
@@ -146,6 +305,11 @@ export function AreaDashboard() {
           </div>
         </div>
 
+        {/* ====================================================
+            TARJETAS DE ESTADÍSTICAS: resumen numérico del área
+            Renderiza 4 tarjetas: total, radicadas, en proceso
+            y cerradas/resueltas.
+        ==================================================== */}
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {[
@@ -166,8 +330,13 @@ export function AreaDashboard() {
           ))}
         </div>
 
+        {/* ====================================================
+            CUERPO PRINCIPAL: lista de PQRS + panel de detalle
+            Layout de dos columnas en escritorio (lg+);
+            en móvil se alterna entre lista y detalle.
+        ==================================================== */}
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* List */}
+          {/* ---- LISTA DE PQRS con filtro por estado ---- */}
           <div className={`flex-1 ${selected ? "hidden lg:block" : "block"}`}>
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -223,6 +392,11 @@ export function AreaDashboard() {
             </Card>
           </div>
 
+          {/* ---- PANEL DE DETALLE Y RESPUESTA ----
+               Solo se muestra cuando hay una PQRS seleccionada.
+               En móvil ocupa toda la pantalla; en escritorio
+               se ubica como columna derecha fija de 440 px.
+          */}
           {/* Detail / Respond panel */}
           {selected && (
             <div className="w-full lg:w-[440px] shrink-0">
