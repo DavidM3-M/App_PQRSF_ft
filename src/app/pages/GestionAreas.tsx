@@ -30,7 +30,30 @@ import {
 
 interface DependencyForm extends DependencyPayload {}
 
-// Deterministic color for an area/dependency based on its id
+// ── localStorage helpers for inactive areas ─────────────────────────────────
+// El backend siempre devuelve solo áreas activas y no filtra por active=false.
+// Guardamos los IDs desactivados localmente para poder mostrarlos en el frontend.
+const INACTIVE_KEY = "pqrs_inactive_area_ids";
+
+function getInactiveIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(INACTIVE_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveInactiveIds(ids: Set<string>): void {
+  try { localStorage.setItem(INACTIVE_KEY, JSON.stringify([...ids])); } catch {}
+}
+
+// Aplica los overrides de inactivos al array devuelto por el backend
+function applyInactiveOverrides(areas: Dependency[]): Dependency[] {
+  const ids = getInactiveIds();
+  if (ids.size === 0) return areas;
+  return areas.map(a => ids.has(a.id) ? { ...a, active: false } : a);
+}
+
+// ── Deterministic color for an area/dependency based on its id ───────────────
 const COLORS = [
   "bg-blue-500", "bg-green-500", "bg-purple-500",
   "bg-orange-500", "bg-red-500", "bg-yellow-500",
@@ -73,8 +96,10 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
         apiListDependencies(true),
         apiListUsers({ page_size: 200 }),
       ]);
-      setAreas(Array.isArray(areasRes) ? areasRes : (areasRes as any).results ?? []);
-      setUsuarios(Array.isArray(usersRes) ? usersRes : (usersRes as any).results ?? []);
+      const toArr = (r: any) => Array.isArray(r) ? r : (r as any).results ?? [];
+      // Aplicar overrides locales de inactivos (el backend solo devuelve activas)
+      setAreas(applyInactiveOverrides(toArr(areasRes)));
+      setUsuarios(toArr(usersRes));
     } catch (e) {
       toast.error("Error al cargar datos", { description: formatApiError(e) });
     } finally {
@@ -127,11 +152,22 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const handleToggleActive = async (area: Dependency) => {
+    const newActive = !area.active;
+    // Actualización optimista
+    setAreas(prev => prev.map(a => a.id === area.id ? { ...a, active: newActive } : a));
+    // Persistir en localStorage para sobrevivir recargas
+    const ids = getInactiveIds();
+    if (newActive) ids.delete(area.id); else ids.add(area.id);
+    saveInactiveIds(ids);
     try {
-      await apiUpdateDependency(area.id, { active: !area.active });
-      toast.success(area.active ? "Area desactivada" : "Area activada");
-      await cargarDatos();
+      await apiUpdateDependency(area.id, { active: newActive });
+      toast.success(newActive ? "Area activada" : "Area desactivada");
     } catch (e) {
+      // Revert optimistic + localStorage si falla
+      setAreas(prev => prev.map(a => a.id === area.id ? { ...a, active: area.active } : a));
+      const revert = getInactiveIds();
+      if (newActive) revert.add(area.id); else revert.delete(area.id);
+      saveInactiveIds(revert);
       toast.error("Error al actualizar area", { description: formatApiError(e) });
     }
   };
@@ -216,7 +252,7 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
       (filtroActivo === "activas" && a.active) ||
       (filtroActivo === "inactivas" && !a.active);
     return matchQ && matchActivo;
-  });
+  }).sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
 
   if (loading) {
     return (

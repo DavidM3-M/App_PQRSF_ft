@@ -915,11 +915,20 @@ export async function apiListAllAssignments(params?: {
 /**
  * Obtiene la lista de dependencias/áreas institucionales.
  *
- * @param all - Si es `true`, solicita hasta 200 registros (para selectores/combos);
- *              si es `false` usa la paginación por defecto del backend.
+ * @param all    - Si es `true`, solicita hasta 200 registros (para selectores/combos);
+ *                 si es `false` usa la paginación por defecto del backend.
+ * @param active - `true` solo activas, `false` solo inactivas, `undefined` todas (sin filtro).
  */
-export async function apiListDependencies(all = false) {
-  const qs = all ? "?page_size=200" : "";
+export async function apiListDependencies(all = false, active?: boolean) {
+  const q = new URLSearchParams();
+  if (all) q.set("page_size", "200");
+  if (active !== undefined) {
+    // Enviamos el filtro con ambos nombres habituales en backends Django
+    // (el backend ignora el parámetro que no reconozca).
+    q.set("active", String(active));
+    q.set("is_active", String(active));
+  }
+  const qs = q.toString() ? `?${q}` : "";
   return apiFetch<PaginatedResponse<Dependency>>(`/api/pqrs/dependencies/${qs}`);
 }
 
