@@ -20,14 +20,17 @@ export function UserDashboard() {
 
   useEffect(() => {
     apiListPQRS({ page_size: 200 })
-      .then((res) =>
+      .then((res) => {
+        const items: PqrsAPI[] = Array.isArray(res)
+          ? (res as unknown as PqrsAPI[])
+          : (res as any).results ?? [];
         setMisPQRS(
-          [...res.results].sort(
+          [...items].sort(
             (a, b) =>
               new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
           ),
-        ),
-      )
+        );
+      })
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, []);

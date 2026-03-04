@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -9,6 +10,8 @@ import { Badge } from "../components/ui/badge";
 import { Search, FileText, Calendar, Clock, MessageSquare, User } from "lucide-react";
 import {
   apiConsultarRadicado,
+  apiListPQRS,
+  apiGetPQRS,
   apiGetResponses,
   formatApiError,
   PQRS_STATUS_LABEL,
@@ -24,6 +27,7 @@ interface ConsultaForm {
 }
 
 export function ConsultaRadicado() {
+  const { usuario } = useAuth();
   const [pqrs, setPqrs] = useState<PqrsAPI | null>(null);
   const [responses, setResponses] = useState<PqrsResponseAPI[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,7 +44,31 @@ export function ConsultaRadicado() {
     setResponses([]);
 
     try {
-      const result = await apiConsultarRadicado(data.radicado.trim());
+      let result: PqrsAPI;
+
+      if (usuario) {
+        // Usuario autenticado: consultar a través del endpoint autenticado
+        // para no depender del campo email (el JWT identifica al usuario).
+        const radicadoTrimmed = data.radicado.trim();
+        const lista = await apiListPQRS({ search: radicadoTrimmed, page_size: 50 });
+        const encontrada = lista.results.find(
+          (p) =>
+            (p.numero_radicado ?? p.radicado ?? "").toLowerCase() ===
+            radicadoTrimmed.toLowerCase(),
+        );
+        if (!encontrada) {
+          toast.error("Radicado no encontrado", {
+            description: "No se encontró ninguna PQRS con ese número de radicado en su cuenta.",
+          });
+          return;
+        }
+        // Obtener el detalle completo para incluir description y todos los campos
+        result = await apiGetPQRS(encontrada.id);
+      } else {
+        // Usuario anónimo: usar endpoint público con email si está disponible.
+        result = await apiConsultarRadicado(data.radicado.trim());
+      }
+
       setPqrs(result);
       // Load public responses
       try {
@@ -241,7 +269,7 @@ export function ConsultaRadicado() {
                     {responses.map((r) => (
                       <div key={r.id} className="rounded-lg bg-blue-50 border border-blue-200 p-4">
                         <div className="flex justify-between text-xs text-blue-700 mb-2">
-                          <span>{r.responded_by?.nombre} {r.responded_by?.apellido}</span>
+                          <span>{typeof r.responded_by === 'object' ? `${r.responded_by?.nombre} ${r.responded_by?.apellido}` : r.responded_by}</span>
                           <span>{formatDateTime(r.created_at)}</span>
                         </div>
                         <p className="text-sm text-blue-900">{r.content}</p>

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import {
   apiListRoles, apiCreateRole, apiListUsers,
-  apiGetUserRoles, apiAssignRole, apiRemoveRole,
+  apiGetUserRoles, apiAssignRole, apiRemoveRole, apiUpdateUser,
   formatApiError,
   type Role, type UsuarioAPI, type UserRole, type RolePayload,
 } from "../lib/api";
@@ -28,7 +28,8 @@ export function GestionRoles({ onClose }: { onClose?: () => void } = {}) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [usuarios, setUsuarios] = useState<UsuarioAPI[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);       // create-role form
+  const [assigning, setAssigning] = useState(false);         // assign/remove role
 
   // create-role form
   const [showForm, setShowForm] = useState(false);
@@ -86,9 +87,11 @@ export function GestionRoles({ onClose }: { onClose?: () => void } = {}) {
   const toggleUser = async (userId: string) => {
     if (expandedUserId === userId) {
       setExpandedUserId(null);
+      setAssigningRoleId("");
       return;
     }
     setExpandedUserId(userId);
+    setAssigningRoleId(""); // reset selection when switching users
     if (!userRoles[userId]) {
       setLoadingUserRoles(true);
       try {
@@ -107,37 +110,77 @@ export function GestionRoles({ onClose }: { onClose?: () => void } = {}) {
 
   const handleAssignRole = async (userId: string) => {
     if (!assigningRoleId) return;
-    setSubmitting(true);
+    // Look up the role being assigned to check if it's ADMIN
+    const assigningRole = roles.find(r => r.id === assigningRoleId);
+    setAssigning(true);
     try {
       await apiAssignRole(userId, assigningRoleId);
+      // If the ADMIN role is being assigned, also set is_staff=true so the
+      // backend permission checks (which rely on is_staff) work correctly.
+      if (assigningRole?.code === "ADMIN") {
+        await apiUpdateUser(userId, { is_staff: true }).catch(() => {
+          // Non-fatal: role was assigned; is_staff sync is best-effort.
+          toast.warning("Rol ADMIN asignado, pero no se pudo sincronizar is_staff. El usuario puede necesitar relanzar sesión.");
+        });
+        // Update local usuarios list so the Admin badge appears immediately
+        setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, is_staff: true } : u));
+      }
       toast.success("Rol asignado correctamente");
       setAssigningRoleId("");
-      // refresh this user's roles
+    } catch (e) {
+      toast.error("Error al asignar rol", { description: formatApiError(e) });
+      setAssigning(false);
+      return;
+    }
+    // refresh this user's roles (separate try so a fetch error doesn't mask the success)
+    try {
       const res = await apiGetUserRoles(userId);
       setUserRoles(prev => ({
         ...prev,
         [userId]: Array.isArray(res) ? res : (res as any).results ?? [],
       }));
-    } catch (e) {
-      toast.error("Error al asignar rol", { description: formatApiError(e) });
+    } catch {
+      // non-critical: just leave the stale list; user can re-expand to refresh
     } finally {
-      setSubmitting(false);
+      setAssigning(false);
     }
   };
 
-  const handleRemoveRole = async (userId: string, userRoleId: string, roleName: string) => {
+  const handleRemoveRole = async (userId: string, userRoleId: string, roleName: string, roleCode: string) => {
     if (!confirm(`¿Quitar el rol "${roleName}" a este usuario?`)) return;
+    setAssigning(true);
     try {
       await apiRemoveRole(userRoleId);
       toast.success("Rol removido correctamente");
-      const res = await apiGetUserRoles(userId);
-      setUserRoles(prev => ({
-        ...prev,
-        [userId]: Array.isArray(res) ? res : (res as any).results ?? [],
-      }));
     } catch (e) {
       toast.error("Error al remover rol", { description: formatApiError(e) });
+      setAssigning(false);
+      return;
     }
+    // refresh this user's roles
+    let freshRoles: UserRole[] = [];
+    try {
+      const res = await apiGetUserRoles(userId);
+      freshRoles = Array.isArray(res) ? res : (res as any).results ?? [];
+      setUserRoles(prev => ({ ...prev, [userId]: freshRoles }));
+    } catch {
+      // non-critical
+    }
+    // If the ADMIN role was removed and the user has no remaining ADMIN role,
+    // revoke is_staff so backend permission checks stop granting admin access.
+    if (roleCode === "ADMIN") {
+      const stillAdmin = freshRoles.some(ur => {
+        const r = typeof ur.role === "object" && ur.role !== null
+          ? (ur.role as Role)
+          : roles.find(r => r.id === ur.role);
+        return r?.code === "ADMIN";
+      });
+      if (!stillAdmin) {
+        await apiUpdateUser(userId, { is_staff: false }).catch(() => { /* best-effort */ });
+        setUsuarios(prev => prev.map(u => u.id === userId ? { ...u, is_staff: false } : u));
+      }
+    }
+    setAssigning(false);
   };
 
   // ── derived ───────────────────────────────────────────────────────────────
@@ -375,8 +418,8 @@ export function GestionRoles({ onClose }: { onClose?: () => void } = {}) {
                                     size="sm"
                                     variant="ghost"
                                     className="text-red-500 hover:text-red-700 h-7 w-7 p-0"
-                                    onClick={() => handleRemoveRole(u.id, ur.id, resolveRole(ur)?.name ?? "este rol")}
-                                  >
+                                    disabled={assigning}
+                                    onClick={() => handleRemoveRole(u.id, ur.id, resolveRole(ur)?.name ?? "este rol", resolveRole(ur)?.code ?? "")}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </div>
@@ -404,10 +447,10 @@ export function GestionRoles({ onClose }: { onClose?: () => void } = {}) {
                             </select>
                             <Button
                               size="sm"
-                              disabled={!assigningRoleId || submitting}
+                              disabled={!assigningRoleId || assigning}
                               onClick={() => handleAssignRole(u.id)}
                             >
-                              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Asignar"}
+                              {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : "Asignar"}
                             </Button>
                           </div>
                         </>

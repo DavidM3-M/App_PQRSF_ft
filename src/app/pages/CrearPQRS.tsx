@@ -40,10 +40,9 @@ const TYPES: { value: PqrsType; label: string }[] = [
 ];
 
 const PRIORITIES: { value: PqrsPriority; label: string }[] = [
-  { value: "LOW", label: "Baja" },
-  { value: "MEDIUM", label: "Media" },
+  { value: "LOW",  label: "Baja" },
+  { value: "MED",  label: "Media" },
   { value: "HIGH", label: "Alta" },
-  { value: "URGENT", label: "Urgente" },
 ];
 
 export function CrearPQRS() {
@@ -58,7 +57,7 @@ export function CrearPQRS() {
     formState: { errors },
     reset,
   } = useForm<PQRSForm>({
-    defaultValues: { priority: "MEDIUM", anon_tipo_documento: "CC" },
+    defaultValues: { priority: "MED", anon_tipo_documento: "CC" },
   });
 
   const onSubmit = async (data: PQRSForm) => {

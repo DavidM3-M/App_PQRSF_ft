@@ -164,6 +164,53 @@ Landing pública con modal de radicación inline:
 - Soporte para adjuntar archivos.
 - Muestra el número de radicado generado al completarse.
 
+### `AreaDashboard` — [src/app/pages/AreaDashboard.tsx](src/app/pages/AreaDashboard.tsx)
+
+> _Documentado el 2026-03-04._
+
+Panel de gestión de PQRSF para funcionarios de dependencia/área. Permite visualizar, filtrar y responder las PQRSF asignadas a la dependencia del usuario autenticado.
+
+#### Estrategia de carga de datos
+
+La función `cargarPQRS` utiliza `Promise.allSettled` para ejecutar dos consultas en paralelo:
+
+1. **Consulta primaria** — PQRSF filtradas por el campo `dependency` del usuario.
+2. **Consulta secundaria** — Lista global de asignaciones activas (falla silenciosamente si el endpoint no está disponible).
+
+Las PQRSF referenciadas en asignaciones pero ausentes de la consulta primaria se recuperan de forma individual. El resultado final se **desduplicha por `id`** y se ordena de más reciente a más antigua.
+
+#### Estados del componente
+
+| Estado | Tipo | Descripción |
+|---|---|---|
+| `pqrsList` | `PqrsAPI[]` | Lista completa de PQRSF asignadas al área |
+| `selected` | `PqrsAPI \| null` | PQRS actualmente abierta en el panel de detalle |
+| `loading` | `boolean` | Indica si la carga/recarga está en curso |
+| `submitting` | `boolean` | Indica si el formulario de respuesta está enviándose |
+| `filtroEstado` | `string` | Filtro de estado activo (`"todos"` muestra todas) |
+
+#### Funciones principales
+
+| Función | Descripción |
+|---|---|
+| `cargarPQRS()` | Carga (o recarga) todas las PQRSF del área con la estrategia de 3 pasos |
+| `onResponder(data)` | Registra la respuesta/nota y opcionalmente cambia el estado de la PQRS |
+| `getStatusBadge(status)` | Genera una etiqueta visual coloreada según el código de estado (`RAD`, `PRO`, `RES`, `CER`) |
+| `contactName(p)` | Resuelve el nombre del remitente con fallback: usuario registrado → anónimo → `"Anónimo"` |
+
+#### Tipos de respuesta (`response_type`)
+
+| Valor | Descripción |
+|---|---|
+| `CITIZEN` | Respuesta dirigida al ciudadano |
+| `FINAL` | Respuesta final / cierre del caso |
+| `INTERNAL` | Nota interna (no visible para el ciudadano) |
+
+#### Layout responsivo
+
+- **Escritorio (≥ 1024 px):** columna izquierda con la lista + columna derecha fija de 440 px para el detalle.
+- **Móvil (< 1024 px):** lista y panel de detalle se alternan; al abrir detalle se bloquea el scroll del `body`.
+
 ---
 
 ## Variables de entorno
@@ -374,6 +421,12 @@ Contexto React que centraliza el estado de sesión:
 ### `src/app/routes.tsx`
 
 Configuración del router con `createBrowserRouter`. Incluye el guardia `ProtectedRoute` que soporta las variantes `adminOnly` y `areaOnly`.
+
+### `src/app/pages/AreaDashboard.tsx`
+
+> _Documentado el 2026-03-04._
+
+Panel del funcionario de área. Ver la sección [`AreaDashboard`](#areadashboard--srcapppagesareadashboardtsx) de la primera parte de esta documentación para el detalle completo de estrategia de carga, estados, funciones y layout responsivo.
 
 ---
 

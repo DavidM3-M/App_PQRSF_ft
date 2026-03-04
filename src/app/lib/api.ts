@@ -263,7 +263,7 @@ export function formatApiError(err: unknown): string {
 
 export type PqrsStatus = "RAD" | "PRO" | "RES" | "CER";
 export type PqrsType = "P" | "Q" | "R" | "S" | "F";
-export type PqrsPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type PqrsPriority = "LOW" | "MED" | "HIGH";
 export type DocumentType = "CC" | "CE" | "TI" | "PA" | "NIT" | "PPT" | "RC";
 
 export interface Dependency {
@@ -286,9 +286,33 @@ export interface UsuarioAPI {
   telefono: string;
   direccion: string;
   ciudad: string;
-  dependency: Dependency | null;
+  /**
+   * El backend puede devolver el objeto Dependency completo o sólo el UUID.
+   * Usar `resolveDepId` / `resolveDepName` para normalizar.
+   */
+  dependency: Dependency | string | null;
   is_staff: boolean;
   activo: boolean;
+  /** Códigos de roles asignados al usuario (ej. ["ADMIN", "GESTOR"]). */
+  roles?: string[];
+}
+
+/**
+ * Extrae el UUID de una dependencia independientemente de si el backend
+ * devolvió el objeto completo o sólo el UUID como string.
+ */
+export function resolveDepId(dep: Dependency | string | null | undefined): string | undefined {
+  if (!dep) return undefined;
+  if (typeof dep === "string") return dep;
+  return dep.id;
+}
+
+/**
+ * Extrae el nombre de una dependencia. Devuelve undefined si solo hay UUID.
+ */
+export function resolveDepName(dep: Dependency | string | null | undefined): string | undefined {
+  if (!dep || typeof dep === "string") return undefined;
+  return dep.name;
 }
 
 export interface PqrsAPI {
@@ -331,8 +355,16 @@ export interface PqrsResponseAPI {
   /** Si esta respuesta cerró la PQRS como resuelta. */
   is_final: boolean;
   created_at: string;
-  /** Usuario que registró la respuesta (campo `responded_by` en el backend). */
-  responded_by: UsuarioAPI;
+  /**
+   * Usuario que registró la respuesta.
+   * El backend puede devolver el objeto completo (`UsuarioAPI`) o sólo el UUID.
+   * También puede aparecer bajo el alias `user` o `created_by`.
+   */
+  responded_by: UsuarioAPI | string | null;
+  /** Alias alternativo que algunos serializers usan en lugar de `responded_by`. */
+  user?: UsuarioAPI | string | null;
+  /** Alias alternativo que algunos serializers usan en lugar de `responded_by`. */
+  created_by?: UsuarioAPI | string | null;
 }
 
 export interface AssignmentAPI {
@@ -388,8 +420,12 @@ export interface UserRole {
 export interface DependencyManager {
   id: string;
   dependency: string | Dependency;
-  user: UsuarioAPI;
-  assigned_by: UsuarioAPI;
+  /**
+   * El backend puede devolver el objeto UsuarioAPI completo o sólo el UUID.
+   * Usar un helper de resolución en los componentes para normalizar.
+   */
+  user: UsuarioAPI | string;
+  assigned_by: UsuarioAPI | string;
   is_active: boolean;
   notes: string;
   assigned_at: string;
@@ -401,7 +437,7 @@ export interface SLAPolicy {
   pqrs_type: PqrsType;
   priority: PqrsPriority;
   business_days: number;
-  description: string;
+  description?: string;
 }
 
 /** Valores válidos para el campo `reason` de una escalación (choices del backend). */
@@ -479,10 +515,9 @@ export const PQRS_TYPE_LABEL: Record<PqrsType, string> = {
 };
 
 export const PQRS_PRIORITY_LABEL: Record<PqrsPriority, string> = {
-  LOW: "Baja",
-  MEDIUM: "Media",
+  LOW:  "Baja",
+  MED:  "Media",
   HIGH: "Alta",
-  URGENT: "Urgente",
 };
 
 // ────────────────────────────────────────────
@@ -660,6 +695,10 @@ export async function apiListPQRS(params?: {
   priority?: PqrsPriority;
   /** Si es `true`, filtra solo las PQRS activas sin responsable asignado. */
   sin_asignar?: boolean;
+  /** Texto libre para buscar por radicado, asunto u otros campos. */
+  search?: string;
+  /** UUID de la dependencia/área para filtrar PQRS asignadas a esa área. */
+  dependency?: string;
   page?: number;
   page_size?: number;
 }) {
@@ -669,6 +708,8 @@ export async function apiListPQRS(params?: {
   if (params?.type) q.set("type", params.type);
   if (params?.priority) q.set("priority", params.priority);
   if (params?.sin_asignar) q.set("sin_asignar", "true");
+  if (params?.search) q.set("search", params.search);
+  if (params?.dependency) q.set("dependency", params.dependency);
   if (params?.page) q.set("page", String(params.page));
   if (params?.page_size) q.set("page_size", String(params.page_size));
   const qs = q.toString() ? `?${q}` : "";
@@ -718,7 +759,7 @@ function normalizePqrsPublica(raw: Record<string, unknown>): PqrsAPI {
     subject:         (pick("subject", "asunto") as string) ?? "",
     description:     (pick("description", "descripcion", "descripci\u00f3n") as string) ?? "",
     status:          (pick("status") as PqrsStatus) ?? ("" as PqrsStatus),
-    priority:        (pick("priority", "prioridad") as PqrsPriority) ?? ("MEDIUM" as PqrsPriority),
+    priority:        (pick("priority", "prioridad") as PqrsPriority) ?? ("MED" as PqrsPriority),
     created_at:      (pick("created_at", "creado_en", "fecha_creacion", "fecha_radicacion") as string) ?? "",
     updated_at:      (pick("updated_at", "actualizado_en", "fecha_actualizacion") as string) ?? "",
     due_date:        (pick("due_date", "fecha_limite", "fecha_vencimiento") as string | null) ?? null,
@@ -736,9 +777,11 @@ function normalizePqrsPublica(raw: Record<string, unknown>): PqrsAPI {
  *
  * @param radicado - Número de radicado (ej. "PQRS-2026-0001").
  */
-export async function apiConsultarRadicado(radicado: string) {
+export async function apiConsultarRadicado(radicado: string, email?: string) {
+  const params = new URLSearchParams({ numero_radicado: radicado });
+  if (email) params.set("email", email);
   const raw = await apiFetch<Record<string, unknown>>(
-    `/api/pqrs/consultar/?numero_radicado=${encodeURIComponent(radicado)}`,
+    `/api/pqrs/consultar/?${params.toString()}`,
     {},
     true, // enviar token si está disponible (el backend lo usa cuando existe)
   );
@@ -756,6 +799,21 @@ export async function apiUpdateEstado(id: string, status: PqrsStatus, notes?: st
   return apiFetch<PqrsAPI>(`/api/pqrs/${id}/estado/`, {
     method: "PATCH",
     body: JSON.stringify({ status, notes }),
+  });
+}
+
+/**
+ * Actualiza campos del PQRS directamente (PATCH parcial).
+ * Útil para sincronizar el campo `dependency` después de una asignación,
+ * de modo que el filtro `?dependency=` del backend devuelva resultados correctos.
+ *
+ * @param id    - UUID de la PQRS.
+ * @param patch - Campos a actualizar (p. ej. `{ dependency: uuid }`).
+ */
+export async function apiPatchPQRS(id: string, patch: { dependency?: string | null; [key: string]: unknown }) {
+  return apiFetch<PqrsAPI>(`/api/pqrs/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
   });
 }
 
@@ -825,6 +883,29 @@ export async function apiGetAssignments(pqrsId: string) {
   return apiFetch<PaginatedResponse<AssignmentAPI>>(
     `/api/pqrs/${pqrsId}/assignments/`,
   );
+}
+
+/**
+ * Lista todas las asignaciones de la plataforma (sin filtrar por PQRS).
+ * Útil para calcular carga de trabajo por usuario o cargar PQRS de un área.
+ *
+ * Endpoint: GET /api/pqrs/assign/
+ */
+export async function apiListAllAssignments(params?: {
+  is_active?: boolean;
+  page_size?: number;
+  /** Filtra asignaciones por UUID de dependencia destino. */
+  dependency?: string;
+  /** Filtra asignaciones por UUID del usuario responsable. */
+  responsible_user?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.is_active !== undefined) q.set("is_active", String(params.is_active));
+  if (params?.page_size) q.set("page_size", String(params.page_size));
+  if (params?.dependency) q.set("dependency", params.dependency);
+  if (params?.responsible_user) q.set("responsible_user", params.responsible_user);
+  const qs = q.toString() ? `?${q}` : "";
+  return apiFetch<PaginatedResponse<AssignmentAPI>>(`/api/pqrs/assign/${qs}`);
 }
 
 // ────────────────────────────────────────────
@@ -910,7 +991,7 @@ export async function apiListUsers(params?: { page?: number; page_size?: number 
  * @param id      - UUID del usuario a actualizar.
  * @param payload - Campos a actualizar (p. ej. `{ dependency: "<uuid>" }`).
  */
-export async function apiUpdateUser(id: string, payload: Partial<Pick<UsuarioAPI, "dependency"> & Record<string, unknown>>) {
+export async function apiUpdateUser(id: string, payload: Partial<Omit<UsuarioAPI, "dependency"> & { dependency: string | Dependency | null } & Record<string, unknown>>) {
   return apiFetch<UsuarioAPI>(`/api/users/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(payload),

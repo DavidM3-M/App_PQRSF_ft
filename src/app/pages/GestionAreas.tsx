@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -19,6 +20,7 @@ import {
   apiListManagers,
   apiAssignManager,
   apiRemoveManager,
+  resolveDepId,
   formatApiError,
   type Dependency,
   type UsuarioAPI,
@@ -55,8 +57,11 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
   const [managers, setManagers] = useState<DependencyManager[]>([]);
   const [loadingManagers, setLoadingManagers] = useState(false);
 
-  // search & filter
+  // search & filter (lista principal)
   const [busqueda, setBusqueda] = useState("");
+  // search dentro de modales
+  const [busquedaUsuarios, setBusquedaUsuarios] = useState("");
+  const [busquedaEncargados, setBusquedaEncargados] = useState("");
   const [filtroActivo, setFiltroActivo] = useState<"todos" | "activas" | "inactivas">("todos");
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<DependencyForm>();
@@ -139,6 +144,7 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
 
   const handleAsignarUsuario = async (usuarioId: string, areaId: string | null) => {
     try {
+      // The backend expects the dependency UUID (or null to remove), not the full object.
       await apiUpdateUser(usuarioId, { dependency: areaId });
       toast.success("Usuario actualizado");
       await cargarDatos();
@@ -185,7 +191,19 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const getUsuariosByArea = (areaId: string) =>
-    usuarios.filter(u => u.dependency?.id === areaId);
+    usuarios.filter(u => resolveDepId(u.dependency) === areaId);
+
+  /** Resuelve el UsuarioAPI de un DependencyManager cuyo campo `user` puede
+   * ser un objeto completo o solo un UUID string. */
+  const resolveManagerUser = (m: DependencyManager): UsuarioAPI | undefined => {
+    if (typeof m.user === "object" && m.user !== null) return m.user as UsuarioAPI;
+    return usuarios.find(u => u.id === m.user);
+  };
+
+  /** Devuelve el id del usuario de un manager independientemente de si user es
+   * objeto o string UUID. */
+  const managerUserId = (m: DependencyManager): string =>
+    typeof m.user === "object" && m.user !== null ? (m.user as UsuarioAPI).id : (m.user as string);
 
   const areasFiltradas = areas.filter(a => {
     const q = busqueda.toLowerCase();
@@ -223,111 +241,115 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
           <Button variant="outline" onClick={() => onClose ? onClose() : navigate("/admin")}>
             {onClose ? "Cerrar" : "Volver al Panel"}
           </Button>
-          {!showForm && (
-            <Button onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Nueva Area
-            </Button>
-          )}
+          <Button onClick={() => { setEditingArea(null); reset(); setShowForm(true); }}>
+            <Plus className="h-4 w-4 mr-1" />
+            Nueva Area
+          </Button>
         </div>
       </div>
 
-      {/* Formulario de creacion/edicion */}
-      {showForm && (
-        <Card className="mb-8">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>{editingArea ? "Editar Area" : "Nueva Area"}</CardTitle>
-              <Button variant="ghost" size="icon" onClick={handleCancelForm}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Nombre */}
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nombre del Area *</Label>
-                  <Input
-                    id="name"
-                    placeholder="Ej: Atencion al Cliente"
-                    {...register("name", {
-                      required: "El nombre es requerido",
-                      minLength: { value: 3, message: "Minimo 3 caracteres" },
-                    })}
-                  />
-                  {errors.name && <p className="text-sm text-red-600">{errors.name.message}</p>}
-                </div>
-
-                {/* Codigo */}
-                <div className="space-y-2">
-                  <Label htmlFor="code">Codigo *</Label>
-                  <Input
-                    id="code"
-                    placeholder="Ej: ATC-01"
-                    {...register("code", {
-                      required: "El codigo es requerido",
-                      minLength: { value: 2, message: "Minimo 2 caracteres" },
-                      maxLength: { value: 20, message: "Maximo 20 caracteres" },
-                      pattern: {
-                        value: /^[A-Za-z0-9_-]+$/,
-                        message: "Solo letras, numeros, guion y underscore",
-                      },
-                    })}
-                  />
-                  {errors.code && <p className="text-sm text-red-600">{errors.code.message}</p>}
-                </div>
-
-                {/* Email */}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Correo del Area *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="area@institucion.edu.co"
-                    {...register("email", {
-                      required: "El correo es requerido",
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: "Correo electronico invalido",
-                      },
-                    })}
-                  />
-                  {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
-                </div>
-              </div>
-
-              {/* Descripcion */}
-              <div className="space-y-2">
-                <Label htmlFor="description">Descripcion *</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Describe las funciones de esta area"
-                  rows={3}
-                  {...register("description", {
-                    required: "La descripcion es requerida",
-                    minLength: { value: 10, message: "Minimo 10 caracteres" },
-                  })}
-                />
-                {errors.description && (
-                  <p className="text-sm text-red-600">{errors.description.message}</p>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <Button type="submit" disabled={submitting}>
-                  {submitting
-                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando...</>
-                    : editingArea ? "Actualizar Area" : "Crear Area"}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleCancelForm} disabled={submitting}>
-                  Cancelar
+      {/* Modal de creacion/edicion de area */}
+      {showForm && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <Card className="w-full max-w-xl">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>{editingArea ? "Editar Area" : "Nueva Area"}</CardTitle>
+                <Button variant="ghost" size="icon" onClick={handleCancelForm}>
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Nombre */}
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nombre del Area *</Label>
+                    <Input
+                      id="name"
+                      placeholder="Ej: Atencion al Cliente"
+                      {...register("name", {
+                        required: "El nombre es requerido",
+                        minLength: { value: 3, message: "Minimo 3 caracteres" },
+                      })}
+                    />
+                    {errors.name && <p className="text-sm text-red-600">{errors.name.message}</p>}
+                  </div>
+
+                  {/* Codigo */}
+                  <div className="space-y-2">
+                    <Label htmlFor="code">Codigo *</Label>
+                    <Input
+                      id="code"
+                      placeholder="Ej: ATC-01"
+                      {...register("code", {
+                        required: "El codigo es requerido",
+                        minLength: { value: 2, message: "Minimo 2 caracteres" },
+                        maxLength: { value: 20, message: "Maximo 20 caracteres" },
+                        pattern: {
+                          value: /^[A-Za-z0-9_-]+$/,
+                          message: "Solo letras, numeros, guion y underscore",
+                        },
+                      })}
+                    />
+                    {errors.code && <p className="text-sm text-red-600">{errors.code.message}</p>}
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Correo del Area *</Label>
+                    <Input
+                      id="email"
+                      type="text"
+                      inputMode="email"
+                      placeholder="area@institucion.edu.co"
+                      {...register("email", {
+                        required: "El correo es requerido",
+                        pattern: {
+                          // type="text" evita que el navegador convierta dominios con
+                          // tildes/ñ a Punycode (xn--...). La validación se hace aquí.
+                          value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                          message: "Correo electronico invalido",
+                        },
+                      })}
+                    />
+                    {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+                  </div>
+                </div>
+
+                {/* Descripcion */}
+                <div className="space-y-2">
+                  <Label htmlFor="description">Descripcion *</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Describe las funciones de esta area"
+                    rows={3}
+                    {...register("description", {
+                      required: "La descripcion es requerida",
+                      minLength: { value: 10, message: "Minimo 10 caracteres" },
+                    })}
+                  />
+                  {errors.description && (
+                    <p className="text-sm text-red-600">{errors.description.message}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button type="submit" disabled={submitting} className="flex-1">
+                    {submitting
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando...</>
+                      : editingArea ? "Actualizar Area" : "Crear Area"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCancelForm} disabled={submitting}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>,
+        document.body
       )}
 
       {/* Barra de búsqueda y filtros */}
@@ -453,8 +475,8 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
       )}
 
       {/* Modal de asignacion de usuarios */}
-      {showUsuariosModal && selectedAreaId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {showUsuariosModal && selectedAreaId && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -470,6 +492,7 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                   onClick={() => {
                     setShowUsuariosModal(false);
                     setSelectedAreaId(null);
+                    setBusquedaUsuarios("");
                   }}
                 >
                   <X className="h-4 w-4" />
@@ -477,17 +500,34 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Buscador */}
+              <div className="relative mb-4">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-sm"
+                  placeholder="Buscar por nombre o correo..."
+                  value={busquedaUsuarios}
+                  onChange={e => setBusquedaUsuarios(e.target.value)}
+                />
+              </div>
               <div className="space-y-3">
-                {usuarios.length === 0 ? (
+                {usuarios.filter(u => !u.is_staff).length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">No hay usuarios disponibles</p>
-                ) : (
-                  usuarios
+                ) : (() => {
+                  const q = busquedaUsuarios.toLowerCase();
+                  const filtrados = usuarios
                     .filter(u => !u.is_staff)
-                    .map(usuario => {
-                      const estaAsignado = usuario.dependency?.id === selectedAreaId;
-                      const areaAsignada = usuario.dependency
-                        ? areas.find(a => a.id === usuario.dependency!.id)
-                        : null;
+                    .filter(u =>
+                      q === "" ||
+                      `${u.nombre} ${u.apellido}`.toLowerCase().includes(q) ||
+                      u.email.toLowerCase().includes(q)
+                    );
+                  if (filtrados.length === 0)
+                    return <p className="text-sm text-gray-400 text-center py-4 italic">Sin coincidencias</p>;
+                  return filtrados.map(usuario => {
+                      const uDepId = resolveDepId(usuario.dependency);
+                      const estaAsignado = uDepId === selectedAreaId;
+                      const areaAsignada = uDepId ? areas.find(a => a.id === uDepId) : null;
 
                       return (
                         <div
@@ -525,16 +565,17 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                           </div>
                         </div>
                       );
-                    })
-                )}
+                    });
+                  })()}
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
       {/* Modal de encargados (DependencyManager) */}
-      {showEncargadosModal && encargadosAreaId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {showEncargadosModal && encargadosAreaId && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -544,7 +585,7 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                     {areas.find(a => a.id === encargadosAreaId)?.name} — Gestione quién puede administrar PQRS de esta área
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => { setShowEncargadosModal(false); setEncargadosAreaId(null); }}>
+                <Button variant="ghost" size="icon" onClick={() => { setShowEncargadosModal(false); setEncargadosAreaId(null); setBusquedaEncargados(""); }}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -560,18 +601,21 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                   {managers.filter(m => m.is_active).length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-gray-700 mb-2">Encargados activos</h4>
-                      {managers.filter(m => m.is_active).map(m => (
+                      {managers.filter(m => m.is_active).map(m => {
+                        const mu = resolveManagerUser(m);
+                        return (
                         <div key={m.id} className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 mb-2">
                           <div>
-                            <p className="font-medium">{m.user.nombre} {m.user.apellido}</p>
-                            <p className="text-sm text-gray-600">{m.user.email}</p>
+                            <p className="font-medium">{mu ? `${mu.nombre} ${mu.apellido}` : managerUserId(m)}</p>
+                            <p className="text-sm text-gray-600">{mu?.email ?? ""}</p>
                             {m.notes && <p className="text-xs text-gray-400 mt-0.5">{m.notes}</p>}
                           </div>
                           <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => handleRemoveEncargado(m.id)}>
                             Desactivar
                           </Button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
@@ -579,27 +623,48 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                   {managers.filter(m => !m.is_active).length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-gray-400 mb-2">Encargados inactivos</h4>
-                      {managers.filter(m => !m.is_active).map(m => (
+                      {managers.filter(m => !m.is_active).map(m => {
+                        const mu = resolveManagerUser(m);
+                        return (
                         <div key={m.id} className="flex items-center justify-between p-3 rounded-lg border opacity-50 mb-2">
                           <div>
-                            <p className="font-medium">{m.user.nombre} {m.user.apellido}</p>
-                            <p className="text-sm text-gray-600">{m.user.email}</p>
+                            <p className="font-medium">{mu ? `${mu.nombre} ${mu.apellido}` : managerUserId(m)}</p>
+                            <p className="text-sm text-gray-600">{mu?.email ?? ""}</p>
                           </div>
                           <Badge variant="secondary">Inactivo</Badge>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
                   {/* Assign new manager */}
                   <div className="border-t pt-4">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Asignar nuevo encargado</h4>
-                    {usuarios.filter(u => !u.is_staff && !managers.some(m => m.user.id === u.id && m.is_active)).length === 0 ? (
-                      <p className="text-sm text-gray-400 italic">No hay usuarios disponibles para asignar.</p>
-                    ) : (
-                      usuarios
-                        .filter(u => !u.is_staff && !managers.some(m => m.user.id === u.id && m.is_active))
-                        .map(u => (
+                    {/* Buscador */}
+                    <div className="relative mb-3">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                      <Input
+                        className="pl-8 h-9 text-sm"
+                        placeholder="Buscar por nombre o correo..."
+                        value={busquedaEncargados}
+                        onChange={e => setBusquedaEncargados(e.target.value)}
+                      />
+                    </div>
+                    {(() => {
+                      const q = busquedaEncargados.toLowerCase();
+                      const disponibles = usuarios
+                        .filter(u => !u.is_staff && !managers.some(m => m.is_active && managerUserId(m) === u.id))
+                        .filter(u =>
+                          q === "" ||
+                          `${u.nombre} ${u.apellido}`.toLowerCase().includes(q) ||
+                          u.email.toLowerCase().includes(q)
+                        );
+                      if (usuarios.filter(u => !u.is_staff && !managers.some(m => m.is_active && managerUserId(m) === u.id)).length === 0)
+                        return <p className="text-sm text-gray-400 italic">No hay usuarios disponibles para asignar.</p>;
+                      if (disponibles.length === 0)
+                        return <p className="text-sm text-gray-400 italic">Sin coincidencias</p>;
+                      return disponibles.map(u => (
                           <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border mb-2">
                             <div>
                               <p className="font-medium">{u.nombre} {u.apellido}</p>
@@ -607,14 +672,15 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                             </div>
                             <Button size="sm" onClick={() => handleAssignEncargado(u.id)}>Asignar</Button>
                           </div>
-                        ))
-                    )}
+                        ));
+                    })()}
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
