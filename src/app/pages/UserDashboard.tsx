@@ -144,7 +144,7 @@ export function UserDashboard() {
                       <p className="text-sm text-gray-500 font-mono">{pqrs.numero_radicado ?? pqrs.radicado}</p>
                     </div>
                     <Badge variant="outline">
-                      {PQRS_TYPE_LABEL[pqrs.pqrs_type] ?? pqrs.pqrs_type}
+                      {pqrs.pqrs_type ? (PQRS_TYPE_LABEL[pqrs.pqrs_type] ?? pqrs.pqrs_type) : 'N/A'}
                     </Badge>
                   </div>
                   <p className="text-sm text-gray-700 mb-3 line-clamp-2">{pqrs.description}</p>
