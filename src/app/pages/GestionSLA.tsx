@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Badge } from "../components/ui/badge";
 import { TrendingUp, Plus, Edit, Trash2, X, Loader2, Search } from "lucide-react";
 import {
-  apiListSLA, apiCreateSLA, apiUpdateSLA, apiDeleteSLA,
+  apiListSLA, apiGetSLA, apiCreateSLA, apiUpdateSLA, apiDeleteSLA,
   formatApiError,
   PQRS_TYPE_LABEL, PQRS_PRIORITY_LABEL,
   type SLAPolicy, type SLAPayload, type PqrsType, type PqrsPriority,
@@ -18,14 +18,13 @@ import {
 
 interface SLAForm extends SLAPayload {}
 
-const PRIORITY_ORDER: PqrsPriority[] = ["URGENT", "HIGH", "MEDIUM", "LOW"];
+const PRIORITY_ORDER: PqrsPriority[] = ["HIGH", "MED", "LOW"];
 const TYPE_ORDER: PqrsType[]         = ["P", "Q", "R", "S", "F"];
 
 const PRIORITY_COLOR: Record<string, string> = {
-  URGENT: "bg-red-100 text-red-700",
-  HIGH:   "bg-orange-100 text-orange-700",
-  MEDIUM: "bg-yellow-100 text-yellow-700",
-  LOW:    "bg-green-100 text-green-700",
+  HIGH: "bg-orange-100 text-orange-700",
+  MED:  "bg-yellow-100 text-yellow-700",
+  LOW:  "bg-green-100 text-green-700",
 };
 
 export function GestionSLA({ onClose }: { onClose?: () => void } = {}) {
@@ -46,7 +45,7 @@ export function GestionSLA({ onClose }: { onClose?: () => void } = {}) {
     defaultValues: {
       name: "",
       pqrs_type: "P",
-      priority: "MEDIUM",
+      priority: "MED",
       business_days: 15,
       description: "",
     },
@@ -57,7 +56,10 @@ export function GestionSLA({ onClose }: { onClose?: () => void } = {}) {
     setLoading(true);
     try {
       const res = await apiListSLA();
-      setPolicies(Array.isArray(res) ? res : (res as any).results ?? []);
+      const lista: SLAPolicy[] = Array.isArray(res) ? res : (res as any).results ?? [];
+      // La lista no incluye `description`; obtener el detalle completo de cada política
+      const detalles = await Promise.all(lista.map(p => apiGetSLA(p.id)));
+      setPolicies(detalles);
     } catch (e) {
       toast.error("Error al cargar políticas SLA", { description: formatApiError(e) });
     } finally {
@@ -90,13 +92,16 @@ export function GestionSLA({ onClose }: { onClose?: () => void } = {}) {
     setSubmitting(true);
     try {
       if (editingPolicy) {
-        await apiUpdateSLA(editingPolicy.id, data);
+        const updated = await apiUpdateSLA(editingPolicy.id, data);
+        // Usar la respuesta completa (incluye description) en lugar de re-fetch de lista
+        setPolicies(prev => prev.map(p => p.id === updated.id ? updated : p));
         toast.success("Política SLA actualizada correctamente");
       } else {
-        await apiCreateSLA(data);
+        const created = await apiCreateSLA(data);
+        // Agregar directamente con todos los campos (incluye description)
+        setPolicies(prev => [...prev, created]);
         toast.success("Política SLA creada correctamente");
       }
-      await cargarDatos();
       handleCancelForm();
     } catch (e) {
       toast.error("Error al guardar política SLA", { description: formatApiError(e) });

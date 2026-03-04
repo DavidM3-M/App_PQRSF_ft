@@ -263,7 +263,7 @@ export function formatApiError(err: unknown): string {
 
 export type PqrsStatus = "RAD" | "PRO" | "RES" | "CER";
 export type PqrsType = "P" | "Q" | "R" | "S" | "F";
-export type PqrsPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type PqrsPriority = "LOW" | "MED" | "HIGH";
 export type DocumentType = "CC" | "CE" | "TI" | "PA" | "NIT" | "PPT" | "RC";
 
 export interface Dependency {
@@ -401,7 +401,7 @@ export interface SLAPolicy {
   pqrs_type: PqrsType;
   priority: PqrsPriority;
   business_days: number;
-  description: string;
+  description?: string;
 }
 
 /** Valores válidos para el campo `reason` de una escalación (choices del backend). */
@@ -479,10 +479,9 @@ export const PQRS_TYPE_LABEL: Record<PqrsType, string> = {
 };
 
 export const PQRS_PRIORITY_LABEL: Record<PqrsPriority, string> = {
-  LOW: "Baja",
-  MEDIUM: "Media",
+  LOW:  "Baja",
+  MED:  "Media",
   HIGH: "Alta",
-  URGENT: "Urgente",
 };
 
 // ────────────────────────────────────────────
@@ -660,6 +659,8 @@ export async function apiListPQRS(params?: {
   priority?: PqrsPriority;
   /** Si es `true`, filtra solo las PQRS activas sin responsable asignado. */
   sin_asignar?: boolean;
+  /** Texto libre para buscar por radicado, asunto u otros campos. */
+  search?: string;
   page?: number;
   page_size?: number;
 }) {
@@ -669,6 +670,7 @@ export async function apiListPQRS(params?: {
   if (params?.type) q.set("type", params.type);
   if (params?.priority) q.set("priority", params.priority);
   if (params?.sin_asignar) q.set("sin_asignar", "true");
+  if (params?.search) q.set("search", params.search);
   if (params?.page) q.set("page", String(params.page));
   if (params?.page_size) q.set("page_size", String(params.page_size));
   const qs = q.toString() ? `?${q}` : "";
@@ -718,7 +720,7 @@ function normalizePqrsPublica(raw: Record<string, unknown>): PqrsAPI {
     subject:         (pick("subject", "asunto") as string) ?? "",
     description:     (pick("description", "descripcion", "descripci\u00f3n") as string) ?? "",
     status:          (pick("status") as PqrsStatus) ?? ("" as PqrsStatus),
-    priority:        (pick("priority", "prioridad") as PqrsPriority) ?? ("MEDIUM" as PqrsPriority),
+    priority:        (pick("priority", "prioridad") as PqrsPriority) ?? ("MED" as PqrsPriority),
     created_at:      (pick("created_at", "creado_en", "fecha_creacion", "fecha_radicacion") as string) ?? "",
     updated_at:      (pick("updated_at", "actualizado_en", "fecha_actualizacion") as string) ?? "",
     due_date:        (pick("due_date", "fecha_limite", "fecha_vencimiento") as string | null) ?? null,
@@ -736,9 +738,11 @@ function normalizePqrsPublica(raw: Record<string, unknown>): PqrsAPI {
  *
  * @param radicado - Número de radicado (ej. "PQRS-2026-0001").
  */
-export async function apiConsultarRadicado(radicado: string) {
+export async function apiConsultarRadicado(radicado: string, email?: string) {
+  const params = new URLSearchParams({ numero_radicado: radicado });
+  if (email) params.set("email", email);
   const raw = await apiFetch<Record<string, unknown>>(
-    `/api/pqrs/consultar/?numero_radicado=${encodeURIComponent(radicado)}`,
+    `/api/pqrs/consultar/?${params.toString()}`,
     {},
     true, // enviar token si está disponible (el backend lo usa cuando existe)
   );
