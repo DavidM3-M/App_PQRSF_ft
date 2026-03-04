@@ -1,0 +1,2546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual de Pruebas - Sistema PQRS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e293b;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 40px;
+            font-size: 1.2rem;
+        }
+
+        .toc {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 40px;
+            border-left: 5px solid #3b82f6;
+        }
+
+        .toc h2 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toc-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .toc-item {
+            padding: 10px 15px;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .toc-item:hover {
+            transform: translateX(5px);
+            border-left-color: #3b82f6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .toc-item a {
+            text-decoration: none;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        .test-section {
+            margin-bottom: 60px;
+            scroll-margin-top: 20px;
+        }
+
+        .section-header {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .section-header h2 {
+            font-size: 1.8rem;
+            flex: 1;
+        }
+
+        .section-icon {
+            font-size: 3rem;
+        }
+
+        .test-case {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-left: 5px solid #10b981;
+            position: relative;
+        }
+
+        .test-case.error {
+            border-left-color: #ef4444;
+        }
+
+        .test-case-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .test-case-title {
+            font-size: 1.4rem;
+            color: #1e293b;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .test-badge {
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .test-objective {
+            background: #eff6ff;
+            border-left: 3px solid #3b82f6;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .test-objective strong {
+            color: #1e40af;
+        }
+
+        .preconditions {
+            background: #fef3c7;
+            border-left: 3px solid #f59e0b;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .preconditions h4 {
+            color: #92400e;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preconditions ul {
+            margin-left: 20px;
+            color: #78350f;
+        }
+
+        .test-steps {
+            margin-top: 25px;
+        }
+
+        .test-step {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .test-step:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+
+        .step-number {
+            position: absolute;
+            top: -15px;
+            left: 20px;
+            background: #3b82f6;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .step-action {
+            margin-bottom: 12px;
+            padding-left: 25px;
+        }
+
+        .step-action strong {
+            color: #1e293b;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 1.05rem;
+        }
+
+        .step-action p {
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        .step-data {
+            background: #f1f5f9;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            border-left: 3px solid #64748b;
+        }
+
+        .step-data code {
+            color: #0f172a;
+        }
+
+        .expected-result {
+            background: #d1fae5;
+            border-left: 3px solid #10b981;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+
+        .expected-result strong {
+            color: #065f46;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .expected-result p {
+            color: #047857;
+        }
+
+        .error-result {
+            background: #fee2e2;
+            border-left: 3px solid #ef4444;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+
+        .error-result strong {
+            color: #991b1b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .error-result p {
+            color: #dc2626;
+        }
+
+        .screenshot-placeholder {
+            background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+            border: 3px dashed #94a3b8;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin: 15px 0;
+            color: #475569;
+        }
+
+        .screenshot-placeholder strong {
+            display: block;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+
+        .validation-box {
+            background: #fff7ed;
+            border: 2px solid #fb923c;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .validation-box h4 {
+            color: #9a3412;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .validation-list {
+            list-style: none;
+            display: grid;
+            gap: 10px;
+        }
+
+        .validation-item {
+            padding: 10px 15px;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            border-left: 3px solid #f97316;
+        }
+
+        .validation-item:before {
+            content: "⚠️";
+            font-size: 1.2rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .data-table th {
+            background: #1e293b;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .data-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #475569;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .notes-box {
+            background: #fef3c7;
+            border-left: 4px solid #eab308;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .notes-box h4 {
+            color: #854d0e;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .notes-box p, .notes-box ul {
+            color: #713f12;
+        }
+
+        .notes-box ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .quick-ref {
+            background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+            border: 2px solid #a78bfa;
+        }
+
+        .quick-ref h3 {
+            color: #5b21b6;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .quick-ref-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .quick-ref-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .quick-ref-item strong {
+            color: #6b21a8;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .quick-ref-item code {
+            color: #7c3aed;
+            font-size: 0.9rem;
+        }
+
+        .button-demo {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 5px;
+            border: none;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .button-demo.secondary {
+            background: white;
+            color: #3b82f6;
+            border: 2px solid #3b82f6;
+        }
+
+        .button-demo.danger {
+            background: #ef4444;
+        }
+
+        .nav-buttons {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: #3b82f6;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .print-section {
+            text-align: center;
+            margin: 40px 0;
+            padding: 30px;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+            }
+            .nav-buttons {
+                display: none;
+            }
+            .test-section {
+                page-break-before: always;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+            .toc-list {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-process { background: #dbeafe; color: #1e40af; }
+        .status-resolved { background: #d1fae5; color: #065f46; }
+        .status-closed { background: #e2e8f0; color: #475569; }
+
+        .field-indicator {
+            background: #e0e7ff;
+            border: 2px solid #6366f1;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin: 5px 0;
+            display: inline-block;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #3730a3;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 3px solid #f59e0b;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            animation: pulse-border 2s infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: #f59e0b; }
+            50% { border-color: #fbbf24; }
+        }
+
+        .highlight-box strong {
+            color: #92400e;
+            font-size: 1.1rem;
+            display: block;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <span>📋</span>
+            Manual de Pruebas para Dummies
+            <span>✅</span>
+        </h1>
+        <p class="subtitle">
+            Guía Completa Paso a Paso - Sistema PQRS Institucional<br>
+            <strong>Casos de Éxito + Casos de Error + Validaciones</strong>
+        </p>
+
+        <!-- Índice -->
+        <div class="toc">
+            <h2>📑 Índice de Pruebas</h2>
+            <ul class="toc-list">
+                <li class="toc-item"><a href="#test-home">1. Página de Inicio (HOME)</a></li>
+                <li class="toc-item"><a href="#test-crear">2. Crear PQRS</a></li>
+                <li class="toc-item"><a href="#test-consulta">3. Consultar Radicado</a></li>
+                <li class="toc-item"><a href="#test-login">4. Iniciar Sesión</a></li>
+                <li class="toc-item"><a href="#test-registro">5. Registro de Usuario</a></li>
+                <li class="toc-item"><a href="#test-dashboard-user">6. Dashboard Usuario</a></li>
+                <li class="toc-item"><a href="#test-dashboard-area">7. Dashboard Área</a></li>
+                <li class="toc-item"><a href="#test-dashboard-admin">8. Dashboard Admin</a></li>
+                <li class="toc-item"><a href="#test-gestion-areas">9. Gestión de Áreas</a></li>
+                <li class="toc-item"><a href="#test-chatbot">10. Chatbot Flotante</a></li>
+            </ul>
+        </div>
+
+        <!-- Referencia Rápida -->
+        <div class="quick-ref">
+            <h3>⚡ Referencia Rápida - Usuarios de Prueba</h3>
+            <div class="quick-ref-grid">
+                <div class="quick-ref-item">
+                    <strong>👨‍💻 Administrador</strong>
+                    <div><code>admin@pqrs.com</code></div>
+                    <div><code>admin123</code></div>
+                </div>
+                <div class="quick-ref-item">
+                    <strong>👤 Usuario Regular</strong>
+                    <div><code>juan@correo.com</code></div>
+                    <div><code>usuario123</code></div>
+                </div>
+                <div class="quick-ref-item">
+                    <strong>🏢 Usuario de Área</strong>
+                    <div><code>maria.area@pqrs.com</code></div>
+                    <div><code>area123</code></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 1: HOME -->
+        <div class="test-section" id="test-home">
+            <div class="section-header">
+                <span class="section-icon">🏠</span>
+                <h2>Test 1: Página de Inicio (HOME)</h2>
+            </div>
+
+            <!-- Caso de Éxito 1.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-01: Navegación en Página de Inicio
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-objective">
+                    <strong>🎯 Objetivo:</strong> Verificar que la página de inicio carga correctamente y todos los elementos son visibles.
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Navegador web abierto (Chrome, Firefox, Safari o Edge)</li>
+                        <li>Conexión a internet activa</li>
+                        <li>URL del sistema conocida</li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🌐 Acción:</strong>
+                            <p>Abrir el navegador web y acceder a la URL del sistema</p>
+                            <div class="step-data">
+                                <code>http://localhost:5173/</code> o la URL del servidor
+                            </div>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>La página de inicio carga completamente y se visualiza:</p>
+                            <ul>
+                                <li>Navbar superior con logo "Sistema PQRS"</li>
+                                <li>Botón "Consultar Radicado" en navbar</li>
+                                <li>Botones "Iniciar Sesión" y "Registrarse"</li>
+                                <li>Hero section con título y descripción</li>
+                                <li>Botón principal "Crear PQRS"</li>
+                                <li>Sección de estadísticas</li>
+                                <li>Chatbot flotante en esquina inferior izquierda</li>
+                            </ul>
+                        </div>
+                        <div class="screenshot-placeholder">
+                            <strong>📸 Captura de Pantalla Esperada:</strong>
+                            <p>Vista completa de la página HOME con todos los elementos visibles</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en el botón "Crear PQRS" del hero section</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se redirige a la página de creación de PQRS (ruta: /crear-pqrs)</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🔙 Acción:</strong>
+                            <p>Hacer clic en el logo "Sistema PQRS" en la navbar</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Regresa a la página de inicio (ruta: /)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notes-box">
+                    <h4>📝 Notas Importantes:</h4>
+                    <ul>
+                        <li>La página debe cargar en menos de 3 segundos</li>
+                        <li>Todos los textos deben estar en español</li>
+                        <li>El diseño debe ser responsive (probar en diferentes tamaños)</li>
+                        <li>No debe haber errores en la consola del navegador (F12)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 2: CREAR PQRS -->
+        <div class="test-section" id="test-crear">
+            <div class="section-header">
+                <span class="section-icon">📝</span>
+                <h2>Test 2: Crear PQRS</h2>
+            </div>
+
+            <!-- Caso de Éxito 2.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-02: Crear PQRS Exitosamente
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-objective">
+                    <strong>🎯 Objetivo:</strong> Verificar que se puede crear una PQRS completando todos los campos correctamente.
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Estar en la página de inicio (HOME)</li>
+                        <li>Sistema funcionando correctamente</li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🌐 Acción:</strong>
+                            <p>Navegar a /crear-pqrs (desde HOME o navbar)</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se visualiza el formulario de creación con los siguientes campos:</p>
+                            <ul>
+                                <li><span class="field-indicator">Tipo de PQRS</span> (selector)</li>
+                                <li><span class="field-indicator">Asunto</span> (campo de texto)</li>
+                                <li><span class="field-indicator">Descripción</span> (área de texto)</li>
+                                <li><span class="field-indicator">Nombre Completo</span> (campo de texto)</li>
+                                <li><span class="field-indicator">Correo Electrónico</span> (campo email)</li>
+                                <li><span class="field-indicator">Teléfono (opcional)</span> (campo de texto)</li>
+                                <li>Botón "Enviar PQRS"</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>📝 Acción:</strong>
+                            <p>Completar el formulario con los siguientes datos de prueba:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor de Prueba</th>
+                                </tr>
+                                <tr>
+                                    <td>Tipo</td>
+                                    <td>Petición</td>
+                                </tr>
+                                <tr>
+                                    <td>Asunto</td>
+                                    <td>Solicitud de información sobre trámites</td>
+                                </tr>
+                                <tr>
+                                    <td>Descripción</td>
+                                    <td>Requiero información detallada sobre los trámites disponibles para personas naturales en la institución.</td>
+                                </tr>
+                                <tr>
+                                    <td>Nombre</td>
+                                    <td>Pedro González López</td>
+                                </tr>
+                                <tr>
+                                    <td>Email</td>
+                                    <td>pedro.gonzalez@ejemplo.com</td>
+                                </tr>
+                                <tr>
+                                    <td>Teléfono</td>
+                                    <td>3001234567</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Los campos se completan sin errores. No aparecen mensajes de validación mientras se escribe.</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en el botón "Enviar PQRS"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se procesa el formulario y aparece:</p>
+                            <ul>
+                                <li>Notificación de éxito (toast verde en esquina superior derecha)</li>
+                                <li>Mensaje: "PQRS creada exitosamente"</li>
+                                <li>Se muestra el número de radicado generado</li>
+                                <li>Formato del radicado: <code>PQRS-2026-XXXX</code></li>
+                                <li>Formulario se limpia automáticamente</li>
+                            </ul>
+                        </div>
+                        <div class="highlight-box">
+                            <strong>⚡ IMPORTANTE:</strong> Copiar y guardar el número de radicado generado para pruebas posteriores de consulta.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 2.2 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-03: Validaciones de Campos Vacíos
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-objective">
+                    <strong>🎯 Objetivo:</strong> Verificar que el sistema valida correctamente campos obligatorios vacíos.
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🌐 Acción:</strong>
+                            <p>Navegar a /crear-pqrs</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Sin llenar ningún campo, hacer clic directamente en "Enviar PQRS"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado (Errores):</strong>
+                            <p>Aparecen mensajes de error en ROJO debajo de cada campo obligatorio:</p>
+                        </div>
+                        <div class="validation-box">
+                            <h4>⚠️ Mensajes de Validación Esperados:</h4>
+                            <ul class="validation-list">
+                                <li class="validation-item">
+                                    <strong>Tipo:</strong> "El tipo de PQRS es requerido"
+                                </li>
+                                <li class="validation-item">
+                                    <strong>Asunto:</strong> "El asunto es requerido"
+                                </li>
+                                <li class="validation-item">
+                                    <strong>Descripción:</strong> "La descripción es requerida"
+                                </li>
+                                <li class="validation-item">
+                                    <strong>Nombre:</strong> "El nombre completo es requerido"
+                                </li>
+                                <li class="validation-item">
+                                    <strong>Email:</strong> "El correo electrónico es requerido"
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Completar solo el campo "Tipo" seleccionando "Queja" y hacer clic en "Enviar PQRS"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>El error del campo "Tipo" desaparece, pero persisten los errores de los demás campos obligatorios.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notes-box">
+                    <h4>📝 Notas de Validación:</h4>
+                    <ul>
+                        <li>Los errores aparecen en texto rojo debajo de cada campo</li>
+                        <li>El formulario NO se envía si hay errores</li>
+                        <li>Los errores desaparecen al llenar correctamente el campo</li>
+                        <li>El campo "Teléfono" es opcional y no debe mostrar error</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Caso de Error 2.3 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-04: Validación de Formato de Email
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Completar el formulario pero en el campo Email escribir:</p>
+                            <div class="step-data">
+                                <code>correo-invalido</code> (sin @ ni dominio)
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "Correo electrónico inválido"</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Corregir el email a un formato válido:</p>
+                            <div class="step-data">
+                                <code>correo@ejemplo.com</code>
+                            </div>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>El mensaje de error desaparece y el campo se marca como válido.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="validation-box">
+                    <h4>⚠️ Casos de Email Inválidos a Probar:</h4>
+                    <ul class="validation-list">
+                        <li class="validation-item">
+                            <strong>correo</strong> → Error: falta @
+                        </li>
+                        <li class="validation-item">
+                            <strong>correo@</strong> → Error: falta dominio
+                        </li>
+                        <li class="validation-item">
+                            <strong>@ejemplo.com</strong> → Error: falta usuario
+                        </li>
+                        <li class="validation-item">
+                            <strong>correo@ejemplo</strong> → Error: falta extensión
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Caso de Error 2.4 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-05: Validación de Longitud Mínima
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>En el campo "Asunto" escribir solo 2 caracteres:</p>
+                            <div class="step-data">
+                                <code>Ab</code>
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "El asunto debe tener al menos 5 caracteres"</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>En el campo "Descripción" escribir solo 5 caracteres:</p>
+                            <div class="step-data">
+                                <code>Texto</code>
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "La descripción debe tener al menos 20 caracteres"</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="validation-box">
+                    <h4>⚠️ Longitudes Mínimas Requeridas:</h4>
+                    <ul class="validation-list">
+                        <li class="validation-item">
+                            <strong>Asunto:</strong> Mínimo 5 caracteres
+                        </li>
+                        <li class="validation-item">
+                            <strong>Descripción:</strong> Mínimo 20 caracteres
+                        </li>
+                        <li class="validation-item">
+                            <strong>Nombre:</strong> Mínimo 3 caracteres
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 3: CONSULTAR RADICADO -->
+        <div class="test-section" id="test-consulta">
+            <div class="section-header">
+                <span class="section-icon">🔍</span>
+                <h2>Test 3: Consultar Radicado</h2>
+            </div>
+
+            <!-- Caso de Éxito 3.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-06: Consultar PQRS Existente
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Tener un radicado válido existente (de prueba o creado anteriormente)</li>
+                        <li>Ejemplo: <code>PQRS-2026-0001</code></li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🌐 Acción:</strong>
+                            <p>Navegar a /consulta (hacer clic en "Consultar Radicado" en navbar)</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se visualiza página con:</p>
+                            <ul>
+                                <li>Campo de búsqueda con placeholder "Ej: PQRS-2026-0001"</li>
+                                <li>Botón "Buscar"</li>
+                                <li>Ícono de lupa 🔍</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Ingresar un radicado existente en el campo de búsqueda:</p>
+                            <div class="step-data">
+                                <code>PQRS-2026-0001</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en el botón "Buscar"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se muestra una tarjeta con los detalles completos de la PQRS:</p>
+                            <ul>
+                                <li><strong>Radicado:</strong> PQRS-2026-0001</li>
+                                <li><strong>Tipo:</strong> Badge con el tipo (Petición/Queja/Reclamo/Sugerencia)</li>
+                                <li><strong>Estado:</strong> Badge de color según estado</li>
+                                <li><strong>Asunto:</strong> Título de la PQRS</li>
+                                <li><strong>Descripción:</strong> Texto completo</li>
+                                <li><strong>Solicitante:</strong> Nombre</li>
+                                <li><strong>Email:</strong> Correo electrónico</li>
+                                <li><strong>Fecha de creación:</strong> Fecha formateada</li>
+                                <li><strong>Respuesta:</strong> (si existe) Texto de la respuesta oficial</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notes-box">
+                    <h4>📝 Estados y Colores:</h4>
+                    <ul>
+                        <li><span class="status-indicator status-pending">⏳ Pendiente</span> - Amarillo</li>
+                        <li><span class="status-indicator status-process">🔄 En Proceso</span> - Azul</li>
+                        <li><span class="status-indicator status-resolved">✅ Resuelto</span> - Verde</li>
+                        <li><span class="status-indicator status-closed">🔒 Cerrado</span> - Gris</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Caso de Error 3.2 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-07: Radicado No Encontrado
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Ingresar un radicado que no existe:</p>
+                            <div class="step-data">
+                                <code>PQRS-2026-9999</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Buscar"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Aparece mensaje de error:</p>
+                            <ul>
+                                <li>Notificación (toast rojo)</li>
+                                <li>Mensaje: "Radicado no encontrado"</li>
+                                <li>Descripción: "No se encontró ninguna PQRS con ese número de radicado"</li>
+                                <li>No se muestra ninguna tarjeta de resultados</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 3.3 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-08: Campo de Búsqueda Vacío
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Sin escribir nada, hacer clic directamente en "Buscar"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "Por favor ingrese un número de radicado"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 4: LOGIN -->
+        <div class="test-section" id="test-login">
+            <div class="section-header">
+                <span class="section-icon">🔐</span>
+                <h2>Test 4: Iniciar Sesión (Login)</h2>
+            </div>
+
+            <!-- Caso de Éxito 4.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-09: Login Exitoso - Usuario Regular
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🌐 Acción:</strong>
+                            <p>Navegar a /login (hacer clic en "Iniciar Sesión" en navbar)</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se muestra formulario de login con:</p>
+                            <ul>
+                                <li>Campo "Correo Electrónico"</li>
+                                <li>Campo "Contraseña" (con puntos ocultos)</li>
+                                <li>Botón "Iniciar Sesión"</li>
+                                <li>Link "¿No tiene cuenta? Regístrese aquí"</li>
+                                <li>Recuadro amarillo con usuarios de prueba</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Ingresar credenciales de usuario regular:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor</th>
+                                </tr>
+                                <tr>
+                                    <td>Email</td>
+                                    <td><code>juan@correo.com</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Contraseña</td>
+                                    <td><code>usuario123</code></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Iniciar Sesión"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Login exitoso con las siguientes acciones:</p>
+                            <ul>
+                                <li>Notificación verde: "¡Bienvenido!"</li>
+                                <li>Se redirige automáticamente a <code>/dashboard</code></li>
+                                <li>En la navbar aparece: nombre del usuario "Juan Pérez"</li>
+                                <li>Botón "Mi Panel" visible en navbar</li>
+                                <li>Botón de "Logout" (icono de salida) visible</li>
+                                <li>Botones "Iniciar Sesión" y "Registrarse" desaparecen</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Éxito 4.2 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-10: Login Exitoso - Administrador
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>En /login, ingresar credenciales de administrador:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor</th>
+                                </tr>
+                                <tr>
+                                    <td>Email</td>
+                                    <td><code>admin@pqrs.com</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Contraseña</td>
+                                    <td><code>admin123</code></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Iniciar Sesión"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Login exitoso con redirección diferente:</p>
+                            <ul>
+                                <li>Notificación verde: "¡Bienvenido!"</li>
+                                <li>Se redirige a <code>/admin</code> (Dashboard Admin)</li>
+                                <li>En navbar aparece "Panel Admin"</li>
+                                <li>Usuario mostrado: "Administrador"</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Éxito 4.3 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-11: Login Exitoso - Usuario de Área
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>En /login, ingresar credenciales de usuario de área:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor</th>
+                                </tr>
+                                <tr>
+                                    <td>Email</td>
+                                    <td><code>maria.area@pqrs.com</code></td>
+                                </tr>
+                                <tr>
+                                    <td>Contraseña</td>
+                                    <td><code>area123</code></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Iniciar Sesión"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Login exitoso con redirección a área:</p>
+                            <ul>
+                                <li>Notificación verde: "¡Bienvenido!"</li>
+                                <li>Se redirige a <code>/area</code> (Dashboard Área)</li>
+                                <li>En navbar aparece "Mi Área"</li>
+                                <li>Usuario mostrado: "María Rodríguez"</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 4.4 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-12: Credenciales Incorrectas
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Ingresar credenciales incorrectas:</p>
+                            <div class="step-data">
+                                <code>Email: usuario@noexiste.com</code><br>
+                                <code>Contraseña: passwordincorrecta</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Iniciar Sesión"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Error de autenticación:</p>
+                            <ul>
+                                <li>Notificación ROJA: "Error de autenticación"</li>
+                                <li>Descripción: "Email o contraseña incorrectos"</li>
+                                <li>Permanece en la página /login</li>
+                                <li>Los campos NO se limpian automáticamente</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 4.5 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-13: Validación de Campos Vacíos en Login
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Sin llenar ningún campo, hacer clic en "Iniciar Sesión"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensajes de validación en rojo:</p>
+                        </div>
+                        <div class="validation-box">
+                            <h4>⚠️ Validaciones Esperadas:</h4>
+                            <ul class="validation-list">
+                                <li class="validation-item">
+                                    <strong>Email:</strong> "El correo es requerido"
+                                </li>
+                                <li class="validation-item">
+                                    <strong>Contraseña:</strong> "La contraseña es requerida"
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Ingresar email con formato inválido:</p>
+                            <div class="step-data">
+                                <code>correo-sin-arroba</code>
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "Correo electrónico inválido"</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Ingresar contraseña con menos de 6 caracteres:</p>
+                            <div class="step-data">
+                                <code>12345</code> (solo 5 caracteres)
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "La contraseña debe tener al menos 6 caracteres"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 5: REGISTRO -->
+        <div class="test-section" id="test-registro">
+            <div class="section-header">
+                <span class="section-icon">✍️</span>
+                <h2>Test 5: Registro de Usuario</h2>
+            </div>
+
+            <!-- Caso de Éxito 5.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-14: Registro Exitoso de Nuevo Usuario
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🌐 Acción:</strong>
+                            <p>Navegar a /registro</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se muestra formulario de registro con campos:</p>
+                            <ul>
+                                <li><span class="field-indicator">Nombre Completo</span></li>
+                                <li><span class="field-indicator">Correo Electrónico</span></li>
+                                <li><span class="field-indicator">Contraseña</span></li>
+                                <li><span class="field-indicator">Confirmar Contraseña</span></li>
+                                <li>Botón "Registrarse"</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Completar el formulario con datos nuevos:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor de Prueba</th>
+                                </tr>
+                                <tr>
+                                    <td>Nombre</td>
+                                    <td>Carlos Ramírez Test</td>
+                                </tr>
+                                <tr>
+                                    <td>Email</td>
+                                    <td>carlos.test@ejemplo.com</td>
+                                </tr>
+                                <tr>
+                                    <td>Contraseña</td>
+                                    <td>test123456</td>
+                                </tr>
+                                <tr>
+                                    <td>Confirmar</td>
+                                    <td>test123456</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Registrarse"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Registro exitoso con las siguientes acciones:</p>
+                            <ul>
+                                <li>Notificación verde: "¡Registro exitoso!"</li>
+                                <li>Auto-login automático</li>
+                                <li>Redirección a <code>/dashboard</code></li>
+                                <li>Usuario logueado aparece en navbar</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notes-box">
+                    <h4>📝 Importante:</h4>
+                    <p>Usar un email diferente cada vez que pruebes el registro, o limpiar el localStorage antes de probar.</p>
+                </div>
+            </div>
+
+            <!-- Caso de Error 5.2 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-15: Email Ya Registrado
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Intentar registrarse con un email que ya existe:</p>
+                            <div class="step-data">
+                                <code>Email: juan@correo.com</code> (ya existe)
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Registrarse"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Notificación roja: "Email ya registrado"</p>
+                            <p>Descripción: "Este correo ya está en uso"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 5.3 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-16: Contraseñas No Coinciden
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Completar el formulario con contraseñas diferentes:</p>
+                            <div class="step-data">
+                                <code>Contraseña: password123</code><br>
+                                <code>Confirmar: password456</code> (diferente)
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Registrarse"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error en rojo: "Las contraseñas no coinciden"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 5.4 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-17: Validaciones de Registro
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="validation-box">
+                    <h4>⚠️ Todas las Validaciones a Probar:</h4>
+                    <ul class="validation-list">
+                        <li class="validation-item">
+                            <strong>Campos vacíos:</strong> Todos los campos son obligatorios
+                        </li>
+                        <li class="validation-item">
+                            <strong>Nombre mínimo:</strong> Al menos 3 caracteres
+                        </li>
+                        <li class="validation-item">
+                            <strong>Email formato:</strong> Debe ser email válido
+                        </li>
+                        <li class="validation-item">
+                            <strong>Contraseña mínima:</strong> Al menos 6 caracteres
+                        </li>
+                        <li class="validation-item">
+                            <strong>Confirmar contraseña:</strong> Debe coincidir con contraseña
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nota de continuación -->
+        <div class="highlight-box" style="margin: 40px 0; text-align: center;">
+            <strong>📚 CONTINÚA EN LA PÁGINA 2</strong>
+            <p style="margin-top: 10px;">
+                Los tests 6-10 (Dashboards, Gestión de Áreas y Chatbot) están disponibles.
+                <br>Haz scroll hacia abajo para continuar con las pruebas.
+            </p>
+        </div>
+
+        <!-- TEST 6: DASHBOARD USUARIO -->
+        <div class="test-section" id="test-dashboard-user">
+            <div class="section-header">
+                <span class="section-icon">📊</span>
+                <h2>Test 6: Dashboard Usuario</h2>
+            </div>
+
+            <!-- Caso de Éxito 6.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-18: Visualizar Dashboard Personal
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Usuario debe estar logueado como usuario regular</li>
+                        <li>Credenciales: <code>juan@correo.com / usuario123</code></li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🔐 Acción:</strong>
+                            <p>Iniciar sesión como usuario regular y verificar redirección a /dashboard</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se visualiza Dashboard del Usuario con:</p>
+                            <ul>
+                                <li><strong>Título:</strong> "Mi Panel de PQRS"</li>
+                                <li><strong>Tarjetas de estadísticas:</strong>
+                                    <ul>
+                                        <li>Total de PQRS</li>
+                                        <li>Pendientes (amarillo)</li>
+                                        <li>En Proceso (azul)</li>
+                                        <li>Resueltas (verde)</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Botón:</strong> "Crear Nueva PQRS"</li>
+                                <li><strong>Filtro:</strong> Dropdown para filtrar por estado</li>
+                                <li><strong>Lista:</strong> Solo las PQRS del usuario actual</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en una PQRS de la lista</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se muestra panel lateral derecho con:</p>
+                            <ul>
+                                <li>Detalles completos de la PQRS</li>
+                                <li>Radicado</li>
+                                <li>Estado con badge de color</li>
+                                <li>Asunto y descripción</li>
+                                <li>Respuesta oficial (si existe)</li>
+                                <li>Fechas de creación y actualización</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Usar el filtro de estado, seleccionar "Pendiente"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>La lista se filtra y muestra solo las PQRS con estado "Pendiente"</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">4</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Crear Nueva PQRS"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se redirige a /crear-pqrs</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 6.2 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-19: Acceso sin Autenticación
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🔓 Acción:</strong>
+                            <p>Cerrar sesión (logout) y luego intentar acceder directamente a:</p>
+                            <div class="step-data">
+                                <code>http://localhost:5173/dashboard</code>
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Redirección automática a /login (ruta protegida)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 7: DASHBOARD ÁREA -->
+        <div class="test-section" id="test-dashboard-area">
+            <div class="section-header">
+                <span class="section-icon">🏢</span>
+                <h2>Test 7: Dashboard Área</h2>
+            </div>
+
+            <!-- Caso de Éxito 7.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-20: Gestionar PQRS del Área
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Iniciar sesión como usuario de área</li>
+                        <li>Credenciales: <code>maria.area@pqrs.com / area123</code></li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🔐 Acción:</strong>
+                            <p>Iniciar sesión y verificar redirección a /area</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se visualiza Dashboard de Área con:</p>
+                            <ul>
+                                <li><strong>Título:</strong> "Panel de Área: [Nombre del Área]"</li>
+                                <li><strong>Badge de color:</strong> Color del área asignada</li>
+                                <li><strong>Descripción:</strong> Del área</li>
+                                <li><strong>Estadísticas del área:</strong>
+                                    <ul>
+                                        <li>Total Asignadas</li>
+                                        <li>Pendientes</li>
+                                        <li>En Proceso</li>
+                                        <li>Resueltas</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Lista:</strong> Solo PQRS asignadas al área</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Seleccionar una PQRS de la lista</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Panel derecho muestra:</p>
+                            <ul>
+                                <li>Detalles de la PQRS</li>
+                                <li>Información del solicitante</li>
+                                <li>Formulario de respuesta</li>
+                                <li>Campo "Estado" (dropdown)</li>
+                                <li>Campo "Respuesta" (textarea)</li>
+                                <li>Botón "Guardar Respuesta"</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Escribir una respuesta y cambiar el estado:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor</th>
+                                </tr>
+                                <tr>
+                                    <td>Estado</td>
+                                    <td>Resuelto</td>
+                                </tr>
+                                <tr>
+                                    <td>Respuesta</td>
+                                    <td>Su solicitud ha sido atendida. Se ha enviado la información requerida a su correo electrónico.</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">4</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Guardar Respuesta"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>Notificación verde: "Respuesta guardada"</li>
+                                <li>La PQRS actualiza su estado a "Resuelto"</li>
+                                <li>El badge de la PQRS cambia a verde</li>
+                                <li>Panel se cierra</li>
+                                <li>Lista se actualiza con el nuevo estado</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 7.2 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-21: Validación de Respuesta Vacía
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Seleccionar una PQRS y sin escribir respuesta, hacer clic en "Guardar Respuesta"</p>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error en rojo: "La respuesta es requerida"</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Escribir una respuesta muy corta (menos de 10 caracteres)</p>
+                            <div class="step-data">
+                                <code>Ok</code>
+                            </div>
+                        </div>
+                        <div class="error-result">
+                            <strong>❌ Resultado Esperado:</strong>
+                            <p>Mensaje de error: "La respuesta debe tener al menos 10 caracteres"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 8: DASHBOARD ADMIN -->
+        <div class="test-section" id="test-dashboard-admin">
+            <div class="section-header">
+                <span class="section-icon">⚙️</span>
+                <h2>Test 8: Dashboard Admin</h2>
+            </div>
+
+            <!-- Caso de Éxito 8.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-22: Asignar PQRS a Área
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Iniciar sesión como administrador</li>
+                        <li>Credenciales: <code>admin@pqrs.com / admin123</code></li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🔐 Acción:</strong>
+                            <p>Iniciar sesión y verificar acceso a /admin</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Dashboard Admin con:</p>
+                            <ul>
+                                <li><strong>Título:</strong> "Panel de Administración"</li>
+                                <li><strong>Botón:</strong> "Gestionar Áreas"</li>
+                                <li><strong>Estadísticas globales:</strong> De TODAS las PQRS</li>
+                                <li><strong>Filtros múltiples:</strong>
+                                    <ul>
+                                        <li>Por estado</li>
+                                        <li>Por tipo</li>
+                                        <li>Por área (incluye "Sin asignar")</li>
+                                        <li>Búsqueda por texto</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Lista:</strong> Todas las PQRS del sistema</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>En el filtro de área, seleccionar "Sin asignar"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>La lista muestra solo PQRS que NO tienen área asignada</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Seleccionar una PQRS sin asignar</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Panel derecho muestra:</p>
+                            <ul>
+                                <li>Detalles de la PQRS</li>
+                                <li><strong>Sección "Asignar a Área"</strong></li>
+                                <li>Dropdown con lista de áreas activas</li>
+                                <li>Opción "Seleccione un área"</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">4</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Seleccionar un área del dropdown, por ejemplo:</p>
+                            <div class="step-data">
+                                <code>Atención al Ciudadano</code>
+                            </div>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>Notificación verde: "PQRS asignada"</li>
+                                <li>La PQRS cambia automáticamente a estado "En Proceso"</li>
+                                <li>Se guarda quién asignó y cuándo</li>
+                                <li>El dropdown se reemplaza por badge del área</li>
+                                <li>Aparece botón "Desasignar"</li>
+                                <li>Panel se cierra</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">5</div>
+                        <div class="step-action">
+                            <strong>🔍 Acción:</strong>
+                            <p>Usar el buscador escribiendo parte de un radicado o asunto</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>La lista se filtra en tiempo real mostrando solo coincidencias</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Éxito 8.2 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-23: Desasignar PQRS de Área
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Seleccionar una PQRS que YA tenga área asignada</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>En el panel derecho se muestra:</p>
+                            <ul>
+                                <li>Badge azul con el nombre del área</li>
+                                <li>Botón "Desasignar"</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Desasignar"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>La PQRS queda sin área asignada</li>
+                                <li>Reaparece el dropdown para asignar</li>
+                                <li>Se actualiza la lista</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 9: GESTIÓN DE ÁREAS -->
+        <div class="test-section" id="test-gestion-areas">
+            <div class="section-header">
+                <span class="section-icon">🏗️</span>
+                <h2>Test 9: Gestión de Áreas</h2>
+            </div>
+
+            <!-- Caso de Éxito 9.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-24: Crear Nueva Área
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="preconditions">
+                    <h4>📋 Precondiciones:</h4>
+                    <ul>
+                        <li>Estar logueado como administrador</li>
+                        <li>Estar en el Dashboard Admin</li>
+                    </ul>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Desde /admin, hacer clic en "Gestionar Áreas"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Redirección a /gestion-areas con:</p>
+                            <ul>
+                                <li>Título "Gestión de Áreas"</li>
+                                <li>Botón "Nueva Área"</li>
+                                <li>Botón "Volver al Panel"</li>
+                                <li>Grid con tarjetas de áreas existentes</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Nueva Área"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se despliega formulario con campos:</p>
+                            <ul>
+                                <li><span class="field-indicator">Nombre del Área</span></li>
+                                <li><span class="field-indicator">Color</span> (dropdown)</li>
+                                <li><span class="field-indicator">Descripción</span></li>
+                                <li>Botón "Crear Área"</li>
+                                <li>Botón "Cancelar"</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Completar el formulario:</p>
+                            <table class="data-table">
+                                <tr>
+                                    <th>Campo</th>
+                                    <th>Valor de Prueba</th>
+                                </tr>
+                                <tr>
+                                    <td>Nombre</td>
+                                    <td>Área de Pruebas Test</td>
+                                </tr>
+                                <tr>
+                                    <td>Color</td>
+                                    <td>Azul</td>
+                                </tr>
+                                <tr>
+                                    <td>Descripción</td>
+                                    <td>Área creada para realizar pruebas del sistema PQRS</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">4</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Crear Área"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>Notificación verde: "Área creada"</li>
+                                <li>El formulario se cierra</li>
+                                <li>Aparece nueva tarjeta en el grid</li>
+                                <li>Tarjeta muestra: nombre, descripción, color, badge "Activa"</li>
+                                <li>Botones: Editar, Usuarios, Desactivar, Eliminar</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Éxito 9.2 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-25: Asignar Usuario a Área
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>En una tarjeta de área, hacer clic en el botón "Usuarios"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se abre modal con:</p>
+                            <ul>
+                                <li>Título: "Gestionar Usuarios"</li>
+                                <li>Subtítulo con nombre del área</li>
+                                <li>Lista de todos los usuarios con rol "area" o "admin"</li>
+                                <li>Cada usuario muestra: nombre, email, área asignada (si tiene)</li>
+                                <li>Botones "Asignar" o "Desasignar" según corresponda</li>
+                                <li>Botón X para cerrar</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Seleccionar un usuario sin área y hacer clic en "Asignar"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>Notificación verde: "Usuario actualizado"</li>
+                                <li>El usuario ahora muestra badge con el área asignada</li>
+                                <li>Botón cambia a "Desasignar"</li>
+                                <li>El contador de usuarios en la tarjeta se actualiza</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Caso de Error 9.3 -->
+            <div class="test-case error">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>❌</span>
+                        TC-26: Validaciones al Crear Área
+                    </div>
+                    <span class="test-badge badge-error">Caso de Error</span>
+                </div>
+
+                <div class="validation-box">
+                    <h4>⚠️ Validaciones a Probar:</h4>
+                    <ul class="validation-list">
+                        <li class="validation-item">
+                            <strong>Nombre vacío:</strong> "El nombre es requerido"
+                        </li>
+                        <li class="validation-item">
+                            <strong>Nombre corto:</strong> "El nombre debe tener al menos 3 caracteres"
+                        </li>
+                        <li class="validation-item">
+                            <strong>Color no seleccionado:</strong> "El color es requerido"
+                        </li>
+                        <li class="validation-item">
+                            <strong>Descripción vacía:</strong> "La descripción es requerida"
+                        </li>
+                        <li class="validation-item">
+                            <strong>Descripción corta:</strong> "La descripción debe tener al menos 10 caracteres"
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEST 10: CHATBOT -->
+        <div class="test-section" id="test-chatbot">
+            <div class="section-header">
+                <span class="section-icon">💬</span>
+                <h2>Test 10: Chatbot Flotante</h2>
+            </div>
+
+            <!-- Caso de Éxito 10.1 -->
+            <div class="test-case">
+                <div class="test-case-header">
+                    <div class="test-case-title">
+                        <span>✅</span>
+                        TC-27: Interacción con Chatbot
+                    </div>
+                    <span class="test-badge badge-success">Caso de Éxito</span>
+                </div>
+
+                <div class="test-steps">
+                    <div class="test-step">
+                        <div class="step-number">1</div>
+                        <div class="step-action">
+                            <strong>👀 Acción:</strong>
+                            <p>En cualquier página, observar la esquina inferior izquierda</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se visualiza botón flotante redondo con ícono de chat (💬)</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">2</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en el botón del chatbot</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se despliega menú en abanico con 4 opciones:</p>
+                            <ul>
+                                <li>📋 Información (azul)</li>
+                                <li>📄 Documentos (morado)</li>
+                                <li>📢 Comunicados (verde)</li>
+                                <li>💬 Atención al Cliente (naranja)</li>
+                            </ul>
+                            <p>El botón principal cambia a X (cerrar)</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">3</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en una opción, por ejemplo "📋 Información"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Se abre panel de chat con:</p>
+                            <ul>
+                                <li>Header con título de la sección</li>
+                                <li>Mensajes predefinidos del bot</li>
+                                <li>Campo de texto para escribir</li>
+                                <li>Botón para enviar</li>
+                                <li>Botón "Volver" para regresar al menú</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">4</div>
+                        <div class="step-action">
+                            <strong>✍️ Acción:</strong>
+                            <p>Escribir un mensaje y enviarlo</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>El mensaje aparece en el chat alineado a la derecha</li>
+                                <li>Respuesta automática del bot aparece a la izquierda</li>
+                                <li>El campo de texto se limpia</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">5</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en "Volver"</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <p>Regresa al menú en abanico con las 4 opciones</p>
+                        </div>
+                    </div>
+
+                    <div class="test-step">
+                        <div class="step-number">6</div>
+                        <div class="step-action">
+                            <strong>🖱️ Acción:</strong>
+                            <p>Hacer clic en el botón X (cerrar)</p>
+                        </div>
+                        <div class="expected-result">
+                            <strong>✅ Resultado Esperado:</strong>
+                            <ul>
+                                <li>El menú se cierra con animación</li>
+                                <li>Solo queda visible el botón principal</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notes-box">
+                    <h4>📝 Responsividad:</h4>
+                    <ul>
+                        <li>En móviles, el chatbot se adapta al tamaño de pantalla</li>
+                        <li>El panel de chat ocupa el ancho adecuado</li>
+                        <li>Las animaciones son suaves en todos los dispositivos</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de impresión -->
+        <div class="print-section">
+            <h2>🖨️ Manual de Pruebas Completo</h2>
+            <p style="margin: 20px 0;">
+                Este documento contiene 27 casos de prueba detallados que cubren:
+            </p>
+            <ul style="text-align: left; display: inline-block; margin: 0 auto;">
+                <li>✅ Casos de éxito (funcionalidad correcta)</li>
+                <li>❌ Casos de error (validaciones y errores esperados)</li>
+                <li>⚠️ Validaciones de formularios</li>
+                <li>🔒 Seguridad y protección de rutas</li>
+                <li>📱 Comportamiento responsive</li>
+            </ul>
+            <div style="margin-top: 30px;">
+                <button class="button-demo" onclick="window.print()">
+                    🖨️ Imprimir Manual Completo
+                </button>
+                <button class="button-demo secondary" onclick="window.location.href='/'">
+                    🏠 Ir al Sistema PQRS
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Botones de navegación flotantes -->
+    <div class="nav-buttons">
+        <button class="nav-btn" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" title="Ir arriba">
+            ↑
+        </button>
+        <button class="nav-btn" onclick="window.print()" title="Imprimir">
+            🖨️
+        </button>
+    </div>
+
+    <script>
+        // Smooth scroll para enlaces del índice
+        document.querySelectorAll('.toc-item a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Highlight en hover para test cases
+        document.querySelectorAll('.test-case').forEach(testCase => {
+            testCase.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateX(5px)';
+            });
+            testCase.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateX(0)';
+            });
+        });
+
+        // Console log
+        console.log('%c📋 Manual de Pruebas PQRS', 'font-size: 20px; color: #3b82f6; font-weight: bold;');
+        console.log('%c27 casos de prueba disponibles', 'font-size: 14px; color: #64748b;');
+    </script>
+</body>
+</html>

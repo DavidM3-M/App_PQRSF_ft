@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Flujo Interactivo - Sistema PQRS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #3b82f6;
+            border: 2px solid #3b82f6;
+        }
+
+        .btn-secondary:hover {
+            background: #eff6ff;
+        }
+
+        .legend {
+            max-width: 1400px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .legend-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+
+        .flow-container {
+            max-width: 1600px;
+            margin: 30px auto;
+            padding: 40px 20px;
+            background: white;
+            border-radius: 20px;
+            position: relative;
+            min-height: 800px;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2rem;
+            color: #1e293b;
+            margin-bottom: 40px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #e2e8f0;
+        }
+
+        /* SVG Container for connections */
+        .connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connection-line {
+            stroke-width: 3;
+            fill: none;
+            opacity: 0.6;
+            transition: all 0.3s;
+        }
+
+        .connection-line.active {
+            stroke-width: 4;
+            opacity: 1;
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+
+        .arrow-marker {
+            fill: currentColor;
+        }
+
+        /* Flow nodes */
+        .flow-level {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 30px;
+            margin: 40px 0;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 2;
+        }
+
+        .flow-node {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            min-width: 200px;
+            max-width: 280px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 3px solid;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .flow-node:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .flow-node.active {
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 12px 32px rgba(59, 130, 246, 0.4);
+            z-index: 101;
+        }
+
+        .flow-node.public { border-color: #3b82f6; }
+        .flow-node.user { border-color: #10b981; }
+        .flow-node.area { border-color: #8b5cf6; }
+        .flow-node.admin { border-color: #ef4444; }
+
+        .node-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .node-icon {
+            font-size: 2rem;
+        }
+
+        .node-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1e293b;
+            flex: 1;
+        }
+
+        .node-route {
+            background: #f1f5f9;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #475569;
+            margin-bottom: 10px;
+            display: inline-block;
+        }
+
+        .node-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .badge-public {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-protected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .node-description {
+            font-size: 0.9rem;
+            color: #64748b;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .node-connections {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 2px dashed #e2e8f0;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .connection-tag {
+            display: inline-block;
+            background: #f1f5f9;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 3px;
+            font-size: 0.75rem;
+        }
+
+        /* Mapa general */
+        .map-view {
+            background: #f8fafc;
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px auto;
+            max-width: 1400px;
+            position: relative;
+        }
+
+        .map-section {
+            margin: 40px 0;
+        }
+
+        .map-section-title {
+            text-align: center;
+            font-size: 1.5rem;
+            color: #1e293b;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+
+        /* Info boxes */
+        .info-panel {
+            position: fixed;
+            right: 20px;
+            top: 120px;
+            width: 320px;
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateX(400px);
+            transition: all 0.4s;
+            z-index: 1000;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .info-panel.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .info-panel h3 {
+            color: #1e293b;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-panel-content {
+            font-size: 0.9rem;
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        .info-panel ul {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .info-panel li {
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-panel li:before {
+            content: "→";
+            color: #3b82f6;
+            font-weight: bold;
+        }
+
+        .close-info {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #f1f5f9;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        .close-info:hover {
+            background: #e2e8f0;
+            transform: rotate(90deg);
+        }
+
+        /* Animated arrows */
+        @keyframes flow-animation {
+            0% {
+                stroke-dashoffset: 0;
+            }
+            100% {
+                stroke-dashoffset: 1000;
+            }
+        }
+
+        .connection-line.animated {
+            stroke-dasharray: 10;
+            animation: flow-animation 20s linear infinite;
+        }
+
+        /* Users credentials */
+        .credentials-panel {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 3px solid #fbbf24;
+            border-radius: 16px;
+            padding: 25px;
+            margin: 30px auto;
+            max-width: 800px;
+        }
+
+        .credentials-panel h3 {
+            color: #92400e;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .credentials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .credential-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .credential-role {
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        .credential-email {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #78350f;
+        }
+
+        .credential-pass {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #78350f;
+            margin-top: 3px;
+        }
+
+        /* Zoom controls */
+        .zoom-controls {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .zoom-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            cursor: pointer;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .zoom-btn:hover {
+            background: #3b82f6;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .info-panel {
+                position: fixed;
+                right: 0;
+                left: 0;
+                top: auto;
+                bottom: 0;
+                width: 100%;
+                border-radius: 20px 20px 0 0;
+                max-height: 60vh;
+            }
+
+            .flow-node {
+                min-width: 150px;
+                max-width: 200px;
+            }
+
+            .zoom-controls {
+                bottom: 15px;
+                right: 15px;
+            }
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 2000;
+            white-space: nowrap;
+        }
+
+        .tooltip.visible {
+            opacity: 1;
+        }
+
+        /* Pulse animation for important nodes */
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            50% {
+                box-shadow: 0 4px 24px rgba(59, 130, 246, 0.4);
+            }
+        }
+
+        .flow-node.pulse {
+            animation: pulse 2s infinite;
+        }
+
+        /* Loading animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .flow-node {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .level-divider {
+            text-align: center;
+            margin: 40px 0;
+            position: relative;
+        }
+
+        .level-divider:after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #cbd5e1, transparent);
+        }
+
+        .level-label {
+            display: inline-block;
+            background: white;
+            padding: 10px 30px;
+            border-radius: 30px;
+            font-weight: 700;
+            color: #475569;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+            <h1>
+                <span>🗺️</span>
+                Mapa de Flujo Interactivo - Sistema PQRS
+            </h1>
+            <div class="controls">
+                <button class="btn btn-primary" onclick="showAllConnections()">
+                    ✨ Mostrar Todas las Conexiones
+                </button>
+                <button class="btn btn-secondary" onclick="resetView()">
+                    🔄 Reiniciar Vista
+                </button>
+                <button class="btn btn-secondary" onclick="window.print()">
+                    🖨️ Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #3b82f6;"></div>
+            <span>🌐 Público</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #10b981;"></div>
+            <span>👤 Usuario Registrado</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #8b5cf6;"></div>
+            <span>🏢 Usuario de Área</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #ef4444;"></div>
+            <span>👨‍💼 Administrador</span>
+        </div>
+        <div class="legend-item" style="border: 2px dashed #3b82f6;">
+            <span>💡 Haz click en los nodos para ver conexiones</span>
+        </div>
+    </div>
+
+    <!-- Credentials -->
+    <div class="credentials-panel">
+        <h3>🔑 Usuarios de Prueba para Iniciar Sesión</h3>
+        <div class="credentials-grid">
+            <div class="credential-card">
+                <div class="credential-role">👨‍💻 ADMINISTRADOR</div>
+                <div class="credential-email">📧 admin@pqrs.com</div>
+                <div class="credential-pass">🔒 admin123</div>
+            </div>
+            <div class="credential-card">
+                <div class="credential-role">👤 USUARIO</div>
+                <div class="credential-email">📧 juan@correo.com</div>
+                <div class="credential-pass">🔒 usuario123</div>
+            </div>
+            <div class="credential-card">
+                <div class="credential-role">🏢 ÁREA</div>
+                <div class="credential-email">📧 maria.area@pqrs.com</div>
+                <div class="credential-pass">🔒 area123</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Flow Container -->
+    <div class="flow-container" id="flowContainer">
+        <svg class="connections-svg" id="connectionsSvg">
+            <defs>
+                <marker id="arrowblue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#3b82f6" />
+                </marker>
+                <marker id="arrowgreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#10b981" />
+                </marker>
+                <marker id="arrowpurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#8b5cf6" />
+                </marker>
+                <marker id="arrowred" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#ef4444" />
+                </marker>
+            </defs>
+        </svg>
+
+        <h2 class="section-title">🌊 Flujo de Navegación Completo</h2>
+
+        <!-- Level 1: Public Pages -->
+        <div class="level-divider">
+            <span class="level-label">🌐 NIVEL 1: PANTALLAS PÚBLICAS</span>
+        </div>
+
+        <div class="flow-level" id="level1">
+            <!-- Home -->
+            <div class="flow-node public pulse" id="node-home" data-connections='["node-crear","node-consulta","node-login","node-registro"]'>
+                <div class="node-header">
+                    <span class="node-icon">🏠</span>
+                    <div class="node-title">HOME</div>
+                </div>
+                <div class="node-route">/</div>
+                <span class="node-badge badge-public">🌐 Público</span>
+                <div class="node-description">
+                    Página de inicio del sistema con información general y accesos principales.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">→ Crear PQRS</span>
+                    <span class="connection-tag">→ Consulta</span>
+                    <span class="connection-tag">→ Login</span>
+                </div>
+            </div>
+
+            <!-- Crear PQRS -->
+            <div class="flow-node public" id="node-crear" data-connections='["node-consulta"]'>
+                <div class="node-header">
+                    <span class="node-icon">📝</span>
+                    <div class="node-title">CREAR PQRS</div>
+                </div>
+                <div class="node-route">/crear-pqrs</div>
+                <span class="node-badge badge-public">🌐 Público</span>
+                <div class="node-description">
+                    Formulario para crear nuevas PQRS con generación de radicado.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">4 tipos disponibles</span>
+                    <span class="connection-tag">Genera radicado</span>
+                </div>
+            </div>
+
+            <!-- Consulta -->
+            <div class="flow-node public" id="node-consulta" data-connections='[]'>
+                <div class="node-header">
+                    <span class="node-icon">🔍</span>
+                    <div class="node-title">CONSULTA</div>
+                </div>
+                <div class="node-route">/consulta</div>
+                <span class="node-badge badge-public">🌐 Público</span>
+                <div class="node-description">
+                    Búsqueda y consulta de PQRS por número de radicado.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">Búsqueda abierta</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auth Level -->
+        <div class="level-divider">
+            <span class="level-label">🔐 AUTENTICACIÓN</span>
+        </div>
+
+        <div class="flow-level" id="level-auth">
+            <!-- Login -->
+            <div class="flow-node public pulse" id="node-login" data-connections='["node-dashboard","node-area","node-admin","node-registro"]'>
+                <div class="node-header">
+                    <span class="node-icon">🔐</span>
+                    <div class="node-title">LOGIN</div>
+                </div>
+                <div class="node-route">/login</div>
+                <span class="node-badge badge-public">🌐 Público</span>
+                <div class="node-description">
+                    Autenticación con redirección según rol de usuario.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">Admin → /admin</span>
+                    <span class="connection-tag">Área → /area</span>
+                    <span class="connection-tag">Usuario → /dashboard</span>
+                </div>
+            </div>
+
+            <!-- Registro -->
+            <div class="flow-node public" id="node-registro" data-connections='["node-dashboard"]'>
+                <div class="node-header">
+                    <span class="node-icon">✍️</span>
+                    <div class="node-title">REGISTRO</div>
+                </div>
+                <div class="node-route">/registro</div>
+                <span class="node-badge badge-public">🌐 Público</span>
+                <div class="node-description">
+                    Crear nueva cuenta con auto-login tras registro.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">Auto-login</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level 2: User Dashboards -->
+        <div class="level-divider">
+            <span class="level-label">🎯 NIVEL 2: DASHBOARDS POR ROL</span>
+        </div>
+
+        <div class="flow-level" id="level2">
+            <!-- Dashboard Usuario -->
+            <div class="flow-node user" id="node-dashboard" data-connections='["node-crear"]'>
+                <div class="node-header">
+                    <span class="node-icon">📊</span>
+                    <div class="node-title">DASHBOARD USUARIO</div>
+                </div>
+                <div class="node-route">/dashboard</div>
+                <span class="node-badge badge-protected">🔒 Usuario</span>
+                <div class="node-description">
+                    Panel personal del usuario registrado con sus PQRS.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">Ver mis PQRS</span>
+                    <span class="connection-tag">Crear nueva</span>
+                </div>
+            </div>
+
+            <!-- Dashboard Área -->
+            <div class="flow-node area" id="node-area" data-connections='[]'>
+                <div class="node-header">
+                    <span class="node-icon">🏢</span>
+                    <div class="node-title">DASHBOARD ÁREA</div>
+                </div>
+                <div class="node-route">/area</div>
+                <span class="node-badge badge-protected">🔒 Área</span>
+                <div class="node-description">
+                    Panel de gestión para usuarios de área específica.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">Ver PQRS del área</span>
+                    <span class="connection-tag">Responder</span>
+                    <span class="connection-tag">Cambiar estados</span>
+                </div>
+            </div>
+
+            <!-- Dashboard Admin -->
+            <div class="flow-node admin" id="node-admin" data-connections='["node-gestion"]'>
+                <div class="node-header">
+                    <span class="node-icon">⚙️</span>
+                    <div class="node-title">DASHBOARD ADMIN</div>
+                </div>
+                <div class="node-route">/admin</div>
+                <span class="node-badge badge-protected">🔒 Admin</span>
+                <div class="node-description">
+                    Panel de administración general del sistema.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">Todas las PQRS</span>
+                    <span class="connection-tag">Asignar áreas</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level 3: Admin Management -->
+        <div class="level-divider">
+            <span class="level-label">⚙️ NIVEL 3: GESTIÓN ADMINISTRATIVA</span>
+        </div>
+
+        <div class="flow-level" id="level3">
+            <!-- Gestión de Áreas -->
+            <div class="flow-node admin" id="node-gestion" data-connections='["node-admin"]'>
+                <div class="node-header">
+                    <span class="node-icon">🏗️</span>
+                    <div class="node-title">GESTIÓN ÁREAS</div>
+                </div>
+                <div class="node-route">/gestion-areas</div>
+                <span class="node-badge badge-protected">🔒 Admin</span>
+                <div class="node-description">
+                    Administración completa de áreas y usuarios.
+                </div>
+                <div class="node-connections">
+                    <span class="connection-tag">CRUD Áreas</span>
+                    <span class="connection-tag">Asignar usuarios</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Panel -->
+    <div class="info-panel" id="infoPanel">
+        <button class="close-info" onclick="closeInfo()">✕</button>
+        <h3 id="infoPanelTitle">
+            <span id="infoPanelIcon"></span>
+            <span id="infoPanelTitleText"></span>
+        </h3>
+        <div class="info-panel-content" id="infoPanelContent"></div>
+    </div>
+
+    <!-- Zoom Controls -->
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn()" title="Acercar">+</button>
+        <button class="zoom-btn" onclick="zoomOut()" title="Alejar">−</button>
+        <button class="zoom-btn" onclick="resetZoom()" title="Reset">↺</button>
+    </div>
+
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Node data with detailed information
+        const nodeData = {
+            'node-home': {
+                title: 'HOME - Página de Inicio',
+                icon: '🏠',
+                description: 'Punto de entrada principal al sistema PQRS.',
+                features: [
+                    'Hero section con información institucional',
+                    'Estadísticas generales del sistema',
+                    'Botón destacado "Crear PQRS"',
+                    'Accesos rápidos a todas las secciones',
+                    'Diseño responsive y accesible'
+                ],
+                navigation: 'Conecta con: Crear PQRS, Consulta, Login, Registro'
+            },
+            'node-crear': {
+                title: 'CREAR PQRS - Formulario',
+                icon: '📝',
+                description: 'Formulario completo para crear nuevas solicitudes.',
+                features: [
+                    '4 tipos: Petición, Queja, Reclamo, Sugerencia',
+                    'Validaciones en tiempo real con react-hook-form',
+                    'Campos: asunto, descripción, nombre, email, teléfono',
+                    'Generación automática de radicado único',
+                    'Confirmación visual con número de radicado',
+                    'Notificaciones de éxito con Sonner'
+                ],
+                navigation: 'Después de crear: puede consultar en /consulta'
+            },
+            'node-consulta': {
+                title: 'CONSULTA - Búsqueda de Radicado',
+                icon: '🔍',
+                description: 'Sistema de consulta pública por radicado.',
+                features: [
+                    'Búsqueda por número de radicado',
+                    'Acceso público (no requiere login)',
+                    'Muestra detalles completos de la PQRS',
+                    'Estado actual y respuestas',
+                    'Información de contacto',
+                    'Fechas de creación y actualización'
+                ],
+                navigation: 'Accesible desde cualquier pantalla'
+            },
+            'node-login': {
+                title: 'LOGIN - Autenticación',
+                icon: '🔐',
+                description: 'Sistema de autenticación con redirección inteligente.',
+                features: [
+                    'Validación de email y contraseña',
+                    'Usuarios de prueba visibles',
+                    'Redirección automática según rol:',
+                    '  • Admin → /admin',
+                    '  • Área → /area',
+                    '  • Usuario → /dashboard',
+                    'Manejo de errores amigable',
+                    'Almacenamiento en localStorage'
+                ],
+                navigation: 'Punto de entrada a áreas protegidas'
+            },
+            'node-registro': {
+                title: 'REGISTRO - Nueva Cuenta',
+                icon: '✍️',
+                description: 'Creación de nuevas cuentas de usuario.',
+                features: [
+                    'Campos: nombre, email, password',
+                    'Confirmación de contraseña',
+                    'Validaciones de seguridad',
+                    'Rol automático: usuario',
+                    'Auto-login tras registro exitoso',
+                    'Redirección a /dashboard'
+                ],
+                navigation: 'Conecta con Login y Dashboard'
+            },
+            'node-dashboard': {
+                title: 'DASHBOARD USUARIO - Panel Personal',
+                icon: '📊',
+                description: 'Panel personal del usuario registrado.',
+                features: [
+                    'Ver solo sus propias PQRS',
+                    'Estadísticas personales (total, pendientes, resueltas)',
+                    'Filtros por estado',
+                    'Panel de detalles de cada PQRS',
+                    'Botón para crear nueva PQRS',
+                    'Consultar respuestas recibidas',
+                    'Seguimiento de estado en tiempo real'
+                ],
+                navigation: 'Puede crear nuevas PQRS desde aquí'
+            },
+            'node-area': {
+                title: 'DASHBOARD ÁREA - Gestión de Área',
+                icon: '🏢',
+                description: 'Panel de gestión para usuarios de área.',
+                features: [
+                    'Información del área asignada',
+                    'Estadísticas del área (total, pendientes, en proceso, resueltas)',
+                    'Ver solo PQRS asignadas a su área',
+                    'Panel de respuesta con editor',
+                    'Cambiar estados de PQRS',
+                    'Responder oficialmente',
+                    'Historial de gestión'
+                ],
+                navigation: 'Solo accesible con rol: area'
+            },
+            'node-admin': {
+                title: 'DASHBOARD ADMIN - Administración',
+                icon: '⚙️',
+                description: 'Panel de administración general del sistema.',
+                features: [
+                    'Ver TODAS las PQRS del sistema',
+                    'Estadísticas globales',
+                    'Asignar PQRS a áreas',
+                    'Desasignar PQRS',
+                    'Responder cualquier PQRS',
+                    'Filtros múltiples: estado, tipo, área',
+                    'Búsqueda avanzada',
+                    'Filtro especial: "Sin asignar"',
+                    'Acceso a gestión de áreas'
+                ],
+                navigation: 'Conecta con Gestión de Áreas'
+            },
+            'node-gestion': {
+                title: 'GESTIÓN DE ÁREAS - Administración',
+                icon: '🏗️',
+                description: 'Administración completa de áreas y usuarios.',
+                features: [
+                    'CRUD completo de áreas:',
+                    '  • Crear nueva área',
+                    '  • Editar área existente',
+                    '  • Activar/Desactivar área',
+                    '  • Eliminar área',
+                    'Gestión de usuarios por área:',
+                    '  • Asignar usuarios a áreas',
+                    '  • Desasignar usuarios',
+                    '  • Ver usuarios por área',
+                    'Personalización: nombre, descripción, color',
+                    'Modal de asignación de usuarios'
+                ],
+                navigation: 'Vuelve a Dashboard Admin'
+            }
+        };
+
+        let currentScale = 1;
+        let activeNode = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupNodeListeners();
+            drawAllConnections();
+            
+            // Highlight home node initially
+            setTimeout(() => {
+                activateNode(document.getElementById('node-home'));
+            }, 500);
+        });
+
+        // Setup click listeners for nodes
+        function setupNodeListeners() {
+            const nodes = document.querySelectorAll('.flow-node');
+            nodes.forEach(node => {
+                node.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    activateNode(this);
+                });
+
+                node.addEventListener('mouseenter', function(e) {
+                    showTooltip(e, 'Click para ver detalles y conexiones');
+                });
+
+                node.addEventListener('mouseleave', function() {
+                    hideTooltip();
+                });
+            });
+        }
+
+        // Activate node and show connections
+        function activateNode(node) {
+            // Remove previous active states
+            document.querySelectorAll('.flow-node').forEach(n => n.classList.remove('active'));
+            document.querySelectorAll('.connection-line').forEach(l => l.classList.remove('active'));
+
+            // Set new active node
+            node.classList.add('active');
+            activeNode = node;
+
+            // Show connections
+            const connections = JSON.parse(node.dataset.connections || '[]');
+            connections.forEach(targetId => {
+                const line = document.getElementById(`line-${node.id}-${targetId}`);
+                if (line) line.classList.add('active');
+            });
+
+            // Show info panel
+            showInfoPanel(node.id);
+        }
+
+        // Show info panel with node details
+        function showInfoPanel(nodeId) {
+            const data = nodeData[nodeId];
+            if (!data) return;
+
+            const panel = document.getElementById('infoPanel');
+            const icon = document.getElementById('infoPanelIcon');
+            const title = document.getElementById('infoPanelTitleText');
+            const content = document.getElementById('infoPanelContent');
+
+            icon.textContent = data.icon;
+            title.textContent = data.title;
+
+            let html = `<p><strong>${data.description}</strong></p>`;
+            html += '<ul>';
+            data.features.forEach(feature => {
+                html += `<li>${feature}</li>`;
+            });
+            html += '</ul>';
+            html += `<p style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #e2e8f0;"><strong>📍 Navegación:</strong><br>${data.navigation}</p>`;
+
+            content.innerHTML = html;
+            panel.classList.add('visible');
+        }
+
+        // Close info panel
+        function closeInfo() {
+            document.getElementById('infoPanel').classList.remove('visible');
+            if (activeNode) {
+                activeNode.classList.remove('active');
+                activeNode = null;
+            }
+            document.querySelectorAll('.connection-line').forEach(l => l.classList.remove('active'));
+        }
+
+        // Draw all connections
+        function drawAllConnections() {
+            const svg = document.getElementById('connectionsSvg');
+            const container = document.getElementById('flowContainer');
+            
+            svg.setAttribute('width', container.offsetWidth);
+            svg.setAttribute('height', container.offsetHeight);
+
+            const nodes = document.querySelectorAll('.flow-node');
+            
+            nodes.forEach(sourceNode => {
+                const connections = JSON.parse(sourceNode.dataset.connections || '[]');
+                const sourceRect = sourceNode.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+
+                connections.forEach(targetId => {
+                    const targetNode = document.getElementById(targetId);
+                    if (!targetNode) return;
+
+                    const targetRect = targetNode.getBoundingClientRect();
+
+                    // Calculate positions relative to container
+                    const x1 = sourceRect.left - containerRect.left + sourceRect.width / 2;
+                    const y1 = sourceRect.bottom - containerRect.top;
+                    const x2 = targetRect.left - containerRect.left + targetRect.width / 2;
+                    const y2 = targetRect.top - containerRect.top;
+
+                    // Determine color based on source node type
+                    let color = '#3b82f6';
+                    let marker = 'arrowblue';
+                    
+                    if (sourceNode.classList.contains('user')) {
+                        color = '#10b981';
+                        marker = 'arrowgreen';
+                    } else if (sourceNode.classList.contains('area')) {
+                        color = '#8b5cf6';
+                        marker = 'arrowpurple';
+                    } else if (sourceNode.classList.contains('admin')) {
+                        color = '#ef4444';
+                        marker = 'arrowred';
+                    }
+
+                    // Create curved path
+                    const midY = y1 + (y2 - y1) / 2;
+                    const path = `M ${x1} ${y1} Q ${x1} ${midY}, ${(x1+x2)/2} ${midY} T ${x2} ${y2}`;
+
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    line.setAttribute('d', path);
+                    line.setAttribute('class', 'connection-line animated');
+                    line.setAttribute('stroke', color);
+                    line.setAttribute('marker-end', `url(#${marker})`);
+                    line.setAttribute('id', `line-${sourceNode.id}-${targetId}`);
+
+                    svg.appendChild(line);
+                });
+            });
+        }
+
+        // Show all connections at once
+        function showAllConnections() {
+            const lines = document.querySelectorAll('.connection-line');
+            lines.forEach(line => {
+                line.classList.add('active');
+            });
+            
+            setTimeout(() => {
+                lines.forEach(line => {
+                    line.classList.remove('active');
+                });
+            }, 5000);
+        }
+
+        // Reset view
+        function resetView() {
+            closeInfo();
+            document.querySelectorAll('.flow-node').forEach(n => n.classList.remove('active'));
+            document.querySelectorAll('.connection-line').forEach(l => l.classList.remove('active'));
+            resetZoom();
+        }
+
+        // Zoom functions
+        function zoomIn() {
+            currentScale = Math.min(currentScale + 0.1, 2);
+            applyZoom();
+        }
+
+        function zoomOut() {
+            currentScale = Math.max(currentScale - 0.1, 0.5);
+            applyZoom();
+        }
+
+        function resetZoom() {
+            currentScale = 1;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            const container = document.getElementById('flowContainer');
+            container.style.transform = `scale(${currentScale})`;
+            container.style.transformOrigin = 'top center';
+        }
+
+        // Tooltip functions
+        function showTooltip(e, text) {
+            const tooltip = document.getElementById('tooltip');
+            tooltip.textContent = text;
+            tooltip.style.left = e.pageX + 15 + 'px';
+            tooltip.style.top = e.pageY + 15 + 'px';
+            tooltip.classList.add('visible');
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+
+        // Redraw connections on resize
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                const svg = document.getElementById('connectionsSvg');
+                while (svg.firstChild && svg.firstChild.tagName !== 'defs') {
+                    svg.removeChild(svg.lastChild);
+                }
+                drawAllConnections();
+            }, 250);
+        });
+
+        // Close info panel when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.flow-node') && !e.target.closest('.info-panel')) {
+                closeInfo();
+            }
+        });
+
+        // Console welcome message
+        console.log('%c🗺️ Mapa Interactivo Sistema PQRS', 'font-size: 24px; color: #3b82f6; font-weight: bold;');
+        console.log('%c💡 Haz click en los nodos para explorar las conexiones', 'font-size: 14px; color: #64748b;');
+    </script>
+</body>
+</html>

@@ -1,0 +1,646 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="4800" height="3200" viewBox="0 0 4800 3200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Título del Documento -->
+  <defs>
+    <!-- Estilos -->
+    <style>
+      .screen-public { fill: #EFF6FF; stroke: #3B82F6; stroke-width: 4; }
+      .screen-user { fill: #D1FAE5; stroke: #10B981; stroke-width: 4; }
+      .screen-area { fill: #EDE9FE; stroke: #8B5CF6; stroke-width: 4; }
+      .screen-admin { fill: #FEE2E2; stroke: #EF4444; stroke-width: 4; }
+      .connection-line { stroke-width: 3; fill: none; opacity: 0.6; }
+      .text-title { font-family: Arial, sans-serif; font-size: 24px; font-weight: bold; fill: #1E293B; }
+      .text-route { font-family: 'Courier New', monospace; font-size: 16px; fill: #475569; }
+      .text-desc { font-family: Arial, sans-serif; font-size: 14px; fill: #64748B; }
+      .text-label { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #1E293B; }
+      .icon-text { font-family: Arial, sans-serif; font-size: 32px; }
+      .badge { font-family: Arial, sans-serif; font-size: 12px; font-weight: 600; }
+    </style>
+    
+    <!-- Definición de flechas -->
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#3B82F6" />
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#10B981" />
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#8B5CF6" />
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#EF4444" />
+    </marker>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="4800" height="3200" fill="#F8FAFC"/>
+
+  <!-- Header del documento -->
+  <g id="header">
+    <rect x="50" y="50" width="4700" height="120" fill="white" stroke="#E2E8F0" stroke-width="2" rx="12"/>
+    <text x="2400" y="100" text-anchor="middle" class="text-title" font-size="36">🗺️ FLUJO DE NAVEGACIÓN - SISTEMA PQRS</text>
+    <text x="2400" y="140" text-anchor="middle" class="text-desc" font-size="18">Diagrama completo de pantallas y conexiones para Figma</text>
+  </g>
+
+  <!-- Leyenda -->
+  <g id="legend">
+    <rect x="50" y="200" width="4700" height="100" fill="white" stroke="#E2E8F0" stroke-width="2" rx="8"/>
+    <text x="150" y="235" class="text-label">Leyenda:</text>
+    
+    <rect x="300" y="215" width="30" height="30" class="screen-public" rx="4"/>
+    <text x="340" y="237" class="text-desc">🌐 Público</text>
+    
+    <rect x="520" y="215" width="30" height="30" class="screen-user" rx="4"/>
+    <text x="560" y="237" class="text-desc">👤 Usuario Registrado</text>
+    
+    <rect x="820" y="215" width="30" height="30" class="screen-area" rx="4"/>
+    <text x="860" y="237" class="text-desc">🏢 Usuario de Área</text>
+    
+    <rect x="1100" y="215" width="30" height="30" class="screen-admin" rx="4"/>
+    <text x="1140" y="237" class="text-desc">👨‍💼 Administrador</text>
+
+    <!-- Usuarios de prueba -->
+    <rect x="1450" y="215" width="700" height="30" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="4"/>
+    <text x="1470" y="237" class="badge" fill="#92400E">admin@pqrs.com / admin123</text>
+    
+    <rect x="2170" y="215" width="700" height="30" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="4"/>
+    <text x="2190" y="237" class="badge" fill="#92400E">juan@correo.com / usuario123</text>
+    
+    <rect x="2890" y="215" width="750" height="30" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="4"/>
+    <text x="2910" y="237" class="badge" fill="#92400E">maria.area@pqrs.com / area123</text>
+  </g>
+
+  <!-- NIVEL 1: PANTALLAS PÚBLICAS -->
+  <g id="level1-public">
+    <!-- Título del nivel -->
+    <rect x="50" y="350" width="4700" height="60" fill="#3B82F6" rx="8"/>
+    <text x="2400" y="390" text-anchor="middle" fill="white" font-size="24" font-weight="bold">🌐 NIVEL 1: PANTALLAS PÚBLICAS</text>
+
+    <!-- HOME -->
+    <g id="screen-home">
+      <rect x="200" y="450" width="350" height="280" class="screen-public" rx="12"/>
+      <text x="375" y="490" text-anchor="middle" class="icon-text">🏠</text>
+      <text x="375" y="525" text-anchor="middle" class="text-title" font-size="20">HOME</text>
+      <rect x="240" y="535" width="270" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="375" y="555" text-anchor="middle" class="text-route">/</text>
+      <rect x="240" y="575" width="100" height="24" fill="#DBEAFE" rx="4"/>
+      <text x="290" y="592" text-anchor="middle" class="badge" fill="#1E40AF">🌐 Público</text>
+      
+      <text x="240" y="620" class="text-desc" font-size="13">• Hero section</text>
+      <text x="240" y="640" class="text-desc" font-size="13">• Estadísticas generales</text>
+      <text x="240" y="660" class="text-desc" font-size="13">• Botón "Crear PQRS"</text>
+      <text x="240" y="680" class="text-desc" font-size="13">• Accesos navegación</text>
+      
+      <rect x="240" y="690" width="270" height="25" fill="#FEF3C7" rx="4"/>
+      <text x="375" y="708" text-anchor="middle" class="badge" fill="#92400E">PUNTO DE INICIO</text>
+    </g>
+
+    <!-- CREAR PQRS -->
+    <g id="screen-crear">
+      <rect x="650" y="450" width="350" height="280" class="screen-public" rx="12"/>
+      <text x="825" y="490" text-anchor="middle" class="icon-text">📝</text>
+      <text x="825" y="525" text-anchor="middle" class="text-title" font-size="20">CREAR PQRS</text>
+      <rect x="690" y="535" width="270" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="825" y="555" text-anchor="middle" class="text-route">/crear-pqrs</text>
+      <rect x="690" y="575" width="100" height="24" fill="#DBEAFE" rx="4"/>
+      <text x="740" y="592" text-anchor="middle" class="badge" fill="#1E40AF">🌐 Público</text>
+      
+      <text x="690" y="620" class="text-desc" font-size="13">• Formulario completo</text>
+      <text x="690" y="640" class="text-desc" font-size="13">• 4 tipos de PQRS</text>
+      <text x="690" y="660" class="text-desc" font-size="13">• Validaciones en vivo</text>
+      <text x="690" y="680" class="text-desc" font-size="13">• Genera radicado</text>
+      <text x="690" y="700" class="text-desc" font-size="13">• Notificación éxito</text>
+    </g>
+
+    <!-- CONSULTA -->
+    <g id="screen-consulta">
+      <rect x="1100" y="450" width="350" height="280" class="screen-public" rx="12"/>
+      <text x="1275" y="490" text-anchor="middle" class="icon-text">🔍</text>
+      <text x="1275" y="525" text-anchor="middle" class="text-title" font-size="20">CONSULTA</text>
+      <rect x="1140" y="535" width="270" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="1275" y="555" text-anchor="middle" class="text-route">/consulta</text>
+      <rect x="1140" y="575" width="100" height="24" fill="#DBEAFE" rx="4"/>
+      <text x="1190" y="592" text-anchor="middle" class="badge" fill="#1E40AF">🌐 Público</text>
+      
+      <text x="1140" y="620" class="text-desc" font-size="13">• Búsqueda por radicado</text>
+      <text x="1140" y="640" class="text-desc" font-size="13">• Acceso sin login</text>
+      <text x="1140" y="660" class="text-desc" font-size="13">• Muestra detalles</text>
+      <text x="1140" y="680" class="text-desc" font-size="13">• Ver estado actual</text>
+      <text x="1140" y="700" class="text-desc" font-size="13">• Ver respuestas</text>
+    </g>
+
+    <!-- LOGIN -->
+    <g id="screen-login">
+      <rect x="1550" y="450" width="350" height="280" class="screen-public" rx="12"/>
+      <text x="1725" y="490" text-anchor="middle" class="icon-text">🔐</text>
+      <text x="1725" y="525" text-anchor="middle" class="text-title" font-size="20">LOGIN</text>
+      <rect x="1590" y="535" width="270" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="1725" y="555" text-anchor="middle" class="text-route">/login</text>
+      <rect x="1590" y="575" width="100" height="24" fill="#DBEAFE" rx="4"/>
+      <text x="1640" y="592" text-anchor="middle" class="badge" fill="#1E40AF">🌐 Público</text>
+      
+      <text x="1590" y="620" class="text-desc" font-size="13">• Email + Password</text>
+      <text x="1590" y="640" class="text-desc" font-size="13">• Validaciones</text>
+      <text x="1590" y="660" class="text-desc" font-size="13">• Redirección por rol:</text>
+      <text x="1600" y="680" class="text-desc" font-size="12">  → Admin: /admin</text>
+      <text x="1600" y="697" class="text-desc" font-size="12">  → Área: /area</text>
+      <text x="1600" y="714" class="text-desc" font-size="12">  → Usuario: /dashboard</text>
+    </g>
+
+    <!-- REGISTRO -->
+    <g id="screen-registro">
+      <rect x="2000" y="450" width="350" height="280" class="screen-public" rx="12"/>
+      <text x="2175" y="490" text-anchor="middle" class="icon-text">✍️</text>
+      <text x="2175" y="525" text-anchor="middle" class="text-title" font-size="20">REGISTRO</text>
+      <rect x="2040" y="535" width="270" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="2175" y="555" text-anchor="middle" class="text-route">/registro</text>
+      <rect x="2040" y="575" width="100" height="24" fill="#DBEAFE" rx="4"/>
+      <text x="2090" y="592" text-anchor="middle" class="badge" fill="#1E40AF">🌐 Público</text>
+      
+      <text x="2040" y="620" class="text-desc" font-size="13">• Nombre, email, password</text>
+      <text x="2040" y="640" class="text-desc" font-size="13">• Confirmar password</text>
+      <text x="2040" y="660" class="text-desc" font-size="13">• Validación email único</text>
+      <text x="2040" y="680" class="text-desc" font-size="13">• Auto-login</text>
+      <text x="2040" y="700" class="text-desc" font-size="13">• Redirige a /dashboard</text>
+    </g>
+  </g>
+
+  <!-- Conexiones Nivel 1 -->
+  <g id="connections-level1">
+    <!-- HOME → CREAR -->
+    <path d="M 550 580 L 650 580" class="connection-line" stroke="#3B82F6" marker-end="url(#arrowBlue)"/>
+    <text x="600" y="570" class="badge" fill="#3B82F6" font-size="11">crear</text>
+    
+    <!-- HOME → CONSULTA -->
+    <path d="M 550 600 Q 825 520, 1100 580" class="connection-line" stroke="#3B82F6" marker-end="url(#arrowBlue)"/>
+    <text x="800" y="500" class="badge" fill="#3B82F6" font-size="11">consultar</text>
+    
+    <!-- HOME → LOGIN -->
+    <path d="M 550 620 Q 1050 500, 1550 580" class="connection-line" stroke="#3B82F6" marker-end="url(#arrowBlue)"/>
+    <text x="1000" y="480" class="badge" fill="#3B82F6" font-size="11">login</text>
+    
+    <!-- HOME → REGISTRO -->
+    <path d="M 550 640 Q 1300 480, 2000 580" class="connection-line" stroke="#3B82F6" marker-end="url(#arrowBlue)"/>
+    <text x="1200" y="460" class="badge" fill="#3B82F6" font-size="11">registro</text>
+    
+    <!-- CREAR → CONSULTA -->
+    <path d="M 1000 580 L 1100 580" class="connection-line" stroke="#3B82F6" marker-end="url(#arrowBlue)"/>
+    <text x="1050" y="570" class="badge" fill="#3B82F6" font-size="11">verificar</text>
+    
+    <!-- LOGIN → REGISTRO -->
+    <path d="M 1900 620 L 2000 620" class="connection-line" stroke="#3B82F6" marker-end="url(#arrowBlue)"/>
+    <text x="1950" y="610" class="badge" fill="#3B82F6" font-size="11">crear cuenta</text>
+  </g>
+
+  <!-- NIVEL 2: DASHBOARDS -->
+  <g id="level2-dashboards">
+    <!-- Título del nivel -->
+    <rect x="50" y="800" width="4700" height="60" fill="#10B981" rx="8"/>
+    <text x="2400" y="840" text-anchor="middle" fill="white" font-size="24" font-weight="bold">🎯 NIVEL 2: DASHBOARDS POR ROL</text>
+
+    <!-- DASHBOARD USUARIO -->
+    <g id="screen-dashboard-user">
+      <rect x="600" y="900" width="400" height="320" class="screen-user" rx="12"/>
+      <text x="800" y="945" text-anchor="middle" class="icon-text">📊</text>
+      <text x="800" y="980" text-anchor="middle" class="text-title" font-size="20">DASHBOARD USUARIO</text>
+      <rect x="650" y="990" width="300" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="800" y="1010" text-anchor="middle" class="text-route">/dashboard</text>
+      <rect x="650" y="1030" width="120" height="24" fill="#FEE2E2" rx="4"/>
+      <text x="710" y="1047" text-anchor="middle" class="badge" fill="#991B1B">🔒 Usuario</text>
+      
+      <text x="650" y="1075" class="text-desc" font-size="13">• Panel personal</text>
+      <text x="650" y="1095" class="text-desc" font-size="13">• Ver solo sus PQRS</text>
+      <text x="650" y="1115" class="text-desc" font-size="13">• Estadísticas personales</text>
+      <text x="650" y="1135" class="text-desc" font-size="13">• Filtros por estado</text>
+      <text x="650" y="1155" class="text-desc" font-size="13">• Panel de detalles</text>
+      <text x="650" y="1175" class="text-desc" font-size="13">• Botón crear nueva</text>
+      <text x="650" y="1195" class="text-desc" font-size="13">• Ver respuestas recibidas</text>
+    </g>
+
+    <!-- DASHBOARD ÁREA -->
+    <g id="screen-dashboard-area">
+      <rect x="1150" y="900" width="400" height="320" class="screen-area" rx="12"/>
+      <text x="1350" y="945" text-anchor="middle" class="icon-text">🏢</text>
+      <text x="1350" y="980" text-anchor="middle" class="text-title" font-size="20">DASHBOARD ÁREA</text>
+      <rect x="1200" y="990" width="300" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="1350" y="1010" text-anchor="middle" class="text-route">/area</text>
+      <rect x="1200" y="1030" width="100" height="24" fill="#FEE2E2" rx="4"/>
+      <text x="1250" y="1047" text-anchor="middle" class="badge" fill="#991B1B">🔒 Área</text>
+      
+      <text x="1200" y="1075" class="text-desc" font-size="13">• Panel del área asignada</text>
+      <text x="1200" y="1095" class="text-desc" font-size="13">• PQRS del área solamente</text>
+      <text x="1200" y="1115" class="text-desc" font-size="13">• Estadísticas del área</text>
+      <text x="1200" y="1135" class="text-desc" font-size="13">• Responder PQRS</text>
+      <text x="1200" y="1155" class="text-desc" font-size="13">• Cambiar estados</text>
+      <text x="1200" y="1175" class="text-desc" font-size="13">• Panel de respuesta</text>
+      <text x="1200" y="1195" class="text-desc" font-size="13">• Gestionar casos</text>
+    </g>
+
+    <!-- DASHBOARD ADMIN -->
+    <g id="screen-dashboard-admin">
+      <rect x="1700" y="900" width="400" height="320" class="screen-admin" rx="12"/>
+      <text x="1900" y="945" text-anchor="middle" class="icon-text">⚙️</text>
+      <text x="1900" y="980" text-anchor="middle" class="text-title" font-size="20">DASHBOARD ADMIN</text>
+      <rect x="1750" y="990" width="300" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="1900" y="1010" text-anchor="middle" class="text-route">/admin</text>
+      <rect x="1750" y="1030" width="110" height="24" fill="#FEE2E2" rx="4"/>
+      <text x="1805" y="1047" text-anchor="middle" class="badge" fill="#991B1B">🔒 Admin</text>
+      
+      <text x="1750" y="1075" class="text-desc" font-size="13">• Ver TODAS las PQRS</text>
+      <text x="1750" y="1095" class="text-desc" font-size="13">• Estadísticas globales</text>
+      <text x="1750" y="1115" class="text-desc" font-size="13">• Asignar a áreas</text>
+      <text x="1750" y="1135" class="text-desc" font-size="13">• Desasignar PQRS</text>
+      <text x="1750" y="1155" class="text-desc" font-size="13">• Responder cualquiera</text>
+      <text x="1750" y="1175" class="text-desc" font-size="13">• Filtros múltiples</text>
+      <text x="1750" y="1195" class="text-desc" font-size="13">• Búsqueda avanzada</text>
+    </g>
+  </g>
+
+  <!-- Conexiones LOGIN → DASHBOARDS -->
+  <g id="connections-login-dashboards">
+    <!-- LOGIN → DASHBOARD USUARIO -->
+    <path d="M 1725 730 Q 1000 800, 800 900" class="connection-line" stroke="#10B981" marker-end="url(#arrowGreen)"/>
+    <text x="1200" y="800" class="badge" fill="#10B981" font-size="12">rol: usuario</text>
+    
+    <!-- LOGIN → DASHBOARD ÁREA -->
+    <path d="M 1725 730 L 1350 900" class="connection-line" stroke="#8B5CF6" marker-end="url(#arrowPurple)"/>
+    <text x="1500" y="800" class="badge" fill="#8B5CF6" font-size="12">rol: area</text>
+    
+    <!-- LOGIN → DASHBOARD ADMIN -->
+    <path d="M 1725 730 L 1900 900" class="connection-line" stroke="#EF4444" marker-end="url(#arrowRed)"/>
+    <text x="1800" y="800" class="badge" fill="#EF4444" font-size="12">rol: admin</text>
+
+    <!-- REGISTRO → DASHBOARD USUARIO -->
+    <path d="M 2175 730 Q 1400 800, 1000 1000" class="connection-line" stroke="#10B981" marker-end="url(#arrowGreen)"/>
+    <text x="1600" y="850" class="badge" fill="#10B981" font-size="12">auto-login</text>
+
+    <!-- DASHBOARD USUARIO → CREAR -->
+    <path d="M 800 900 Q 825 750, 825 730" class="connection-line" stroke="#10B981" marker-end="url(#arrowGreen)"/>
+    <text x="850" y="800" class="badge" fill="#10B981" font-size="12">nueva PQRS</text>
+  </g>
+
+  <!-- NIVEL 3: GESTIÓN ADMIN -->
+  <g id="level3-admin">
+    <!-- Título del nivel -->
+    <rect x="50" y="1280" width="4700" height="60" fill="#EF4444" rx="8"/>
+    <text x="2400" y="1320" text-anchor="middle" fill="white" font-size="24" font-weight="bold">⚙️ NIVEL 3: GESTIÓN ADMINISTRATIVA</text>
+
+    <!-- GESTIÓN DE ÁREAS -->
+    <g id="screen-gestion-areas">
+      <rect x="1700" y="1380" width="400" height="380" class="screen-admin" rx="12"/>
+      <text x="1900" y="1425" text-anchor="middle" class="icon-text">🏗️</text>
+      <text x="1900" y="1460" text-anchor="middle" class="text-title" font-size="20">GESTIÓN ÁREAS</text>
+      <rect x="1750" y="1470" width="300" height="30" fill="#F1F5F9" rx="4"/>
+      <text x="1900" y="1490" text-anchor="middle" class="text-route">/gestion-areas</text>
+      <rect x="1750" y="1510" width="110" height="24" fill="#FEE2E2" rx="4"/>
+      <text x="1805" y="1527" text-anchor="middle" class="badge" fill="#991B1B">🔒 Admin</text>
+      
+      <text x="1750" y="1560" class="text-desc" font-size="13" font-weight="bold">CRUD de Áreas:</text>
+      <text x="1750" y="1580" class="text-desc" font-size="13">• Crear nueva área</text>
+      <text x="1750" y="1600" class="text-desc" font-size="13">• Editar área existente</text>
+      <text x="1750" y="1620" class="text-desc" font-size="13">• Activar/Desactivar</text>
+      <text x="1750" y="1640" class="text-desc" font-size="13">• Eliminar área</text>
+      
+      <text x="1750" y="1670" class="text-desc" font-size="13" font-weight="bold">Gestión de Usuarios:</text>
+      <text x="1750" y="1690" class="text-desc" font-size="13">• Asignar usuarios a áreas</text>
+      <text x="1750" y="1710" class="text-desc" font-size="13">• Desasignar usuarios</text>
+      <text x="1750" y="1730" class="text-desc" font-size="13">• Ver usuarios por área</text>
+      <text x="1750" y="1750" class="text-desc" font-size="13">• Modal de asignación</text>
+    </g>
+  </g>
+
+  <!-- Conexión ADMIN → GESTIÓN ÁREAS -->
+  <g id="connections-admin-gestion">
+    <path d="M 1900 1220 L 1900 1380" class="connection-line" stroke="#EF4444" marker-end="url(#arrowRed)"/>
+    <text x="1920" y="1300" class="badge" fill="#EF4444" font-size="12">Gestionar Áreas</text>
+    
+    <!-- Flecha de retorno -->
+    <path d="M 1850 1380 L 1850 1220" class="connection-line" stroke="#EF4444" marker-end="url(#arrowRed)" stroke-dasharray="5,5"/>
+    <text x="1750" y="1300" class="badge" fill="#EF4444" font-size="12">Volver</text>
+  </g>
+
+  <!-- ÁREAS DEL SISTEMA -->
+  <g id="areas-section">
+    <!-- Título -->
+    <rect x="2600" y="900" width="2050" height="60" fill="#8B5CF6" rx="8"/>
+    <text x="3625" y="940" text-anchor="middle" fill="white" font-size="24" font-weight="bold">🏛️ ÁREAS PREDEFINIDAS DEL SISTEMA</text>
+
+    <!-- Área 1: Atención al Ciudadano -->
+    <g id="area-1">
+      <rect x="2650" y="1000" width="450" height="150" fill="#EFF6FF" stroke="#3B82F6" stroke-width="3" rx="12"/>
+      <text x="2875" y="1040" text-anchor="middle" class="icon-text">💼</text>
+      <text x="2875" y="1075" text-anchor="middle" class="text-title" font-size="18">Atención al Ciudadano</text>
+      <rect x="2720" y="1085" width="310" height="50" fill="#DBEAFE" rx="6"/>
+      <text x="2875" y="1107" text-anchor="middle" class="text-desc" font-size="12">Área encargada de peticiones</text>
+      <text x="2875" y="1125" text-anchor="middle" class="text-desc" font-size="12">generales y consultas</text>
+    </g>
+
+    <!-- Área 2: Recursos Humanos -->
+    <g id="area-2">
+      <rect x="3150" y="1000" width="450" height="150" fill="#F5F3FF" stroke="#8B5CF6" stroke-width="3" rx="12"/>
+      <text x="3375" y="1040" text-anchor="middle" class="icon-text">👥</text>
+      <text x="3375" y="1075" text-anchor="middle" class="text-title" font-size="18">Recursos Humanos</text>
+      <rect x="3220" y="1085" width="310" height="50" fill="#EDE9FE" rx="6"/>
+      <text x="3375" y="1107" text-anchor="middle" class="text-desc" font-size="12">Gestión de quejas y reclamos</text>
+      <text x="3375" y="1125" text-anchor="middle" class="text-desc" font-size="12">laborales internos</text>
+    </g>
+
+    <!-- Área 3: Servicios Técnicos -->
+    <g id="area-3">
+      <rect x="3650" y="1000" width="450" height="150" fill="#ECFDF5" stroke="#10B981" stroke-width="3" rx="12"/>
+      <text x="3875" y="1040" text-anchor="middle" class="icon-text">🔧</text>
+      <text x="3875" y="1075" text-anchor="middle" class="text-title" font-size="18">Servicios Técnicos</text>
+      <rect x="3720" y="1085" width="310" height="50" fill="#D1FAE5" rx="6"/>
+      <text x="3875" y="1107" text-anchor="middle" class="text-desc" font-size="12">Atención de reclamos técnicos</text>
+      <text x="3875" y="1125" text-anchor="middle" class="text-desc" font-size="12">y mantenimiento</text>
+    </g>
+
+    <!-- Área 4: Calidad -->
+    <g id="area-4">
+      <rect x="4150" y="1000" width="450" height="150" fill="#FFF7ED" stroke="#F97316" stroke-width="3" rx="12"/>
+      <text x="4375" y="1040" text-anchor="middle" class="icon-text">⭐</text>
+      <text x="4375" y="1075" text-anchor="middle" class="text-title" font-size="18">Calidad</text>
+      <rect x="4220" y="1085" width="310" height="50" fill="#FED7AA" rx="6"/>
+      <text x="4375" y="1107" text-anchor="middle" class="text-desc" font-size="12">Gestión de sugerencias</text>
+      <text x="4375" y="1125" text-anchor="middle" class="text-desc" font-size="12">y mejora continua</text>
+    </g>
+  </g>
+
+  <!-- ESTADOS Y TIPOS -->
+  <g id="estados-tipos-section">
+    <!-- Estados de PQRS -->
+    <g id="estados">
+      <rect x="2650" y="1200" width="950" height="500" fill="white" stroke="#E2E8F0" stroke-width="2" rx="12"/>
+      <text x="3125" y="1240" text-anchor="middle" class="text-label" font-size="20">📊 ESTADOS DE PQRS</text>
+      
+      <!-- Pendiente -->
+      <rect x="2700" y="1270" width="850" height="80" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" rx="8"/>
+      <text x="2750" y="1300" class="icon-text" font-size="28">⏳</text>
+      <text x="2820" y="1302" class="text-title" font-size="18">PENDIENTE</text>
+      <text x="2750" y="1330" class="text-desc">Recién creada, sin atender aún</text>
+      
+      <!-- En Proceso -->
+      <rect x="2700" y="1370" width="850" height="80" fill="#DBEAFE" stroke="#3B82F6" stroke-width="2" rx="8"/>
+      <text x="2750" y="1400" class="icon-text" font-size="28">🔄</text>
+      <text x="2820" y="1402" class="text-title" font-size="18">EN PROCESO</text>
+      <text x="2750" y="1430" class="text-desc">Asignada a área y en atención</text>
+      
+      <!-- Resuelto -->
+      <rect x="2700" y="1470" width="850" height="80" fill="#D1FAE5" stroke="#10B981" stroke-width="2" rx="8"/>
+      <text x="2750" y="1500" class="icon-text" font-size="28">✅</text>
+      <text x="2820" y="1502" class="text-title" font-size="18">RESUELTO</text>
+      <text x="2750" y="1530" class="text-desc">Respondida y solucionada</text>
+      
+      <!-- Cerrado -->
+      <rect x="2700" y="1570" width="850" height="80" fill="#F1F5F9" stroke="#64748B" stroke-width="2" rx="8"/>
+      <text x="2750" y="1600" class="icon-text" font-size="28">🔒</text>
+      <text x="2820" y="1602" class="text-title" font-size="18">CERRADO</text>
+      <text x="2750" y="1630" class="text-desc">Finalizada completamente</text>
+    </g>
+
+    <!-- Tipos de PQRS -->
+    <g id="tipos">
+      <rect x="3650" y="1200" width="950" height="500" fill="white" stroke="#E2E8F0" stroke-width="2" rx="12"/>
+      <text x="4125" y="1240" text-anchor="middle" class="text-label" font-size="20">📋 TIPOS DE PQRS</text>
+      
+      <!-- Petición -->
+      <rect x="3700" y="1270" width="850" height="80" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2" rx="8"/>
+      <text x="3750" y="1300" class="icon-text" font-size="28">📋</text>
+      <text x="3820" y="1302" class="text-title" font-size="18">PETICIÓN</text>
+      <text x="3750" y="1330" class="text-desc">Solicitud de información o servicios</text>
+      
+      <!-- Queja -->
+      <rect x="3700" y="1370" width="850" height="80" fill="#FFF7ED" stroke="#F97316" stroke-width="2" rx="8"/>
+      <text x="3750" y="1400" class="icon-text" font-size="28">😠</text>
+      <text x="3820" y="1402" class="text-title" font-size="18">QUEJA</text>
+      <text x="3750" y="1430" class="text-desc">Expresión de insatisfacción</text>
+      
+      <!-- Reclamo -->
+      <rect x="3700" y="1470" width="850" height="80" fill="#FEE2E2" stroke="#EF4444" stroke-width="2" rx="8"/>
+      <text x="3750" y="1500" class="icon-text" font-size="28">⚠️</text>
+      <text x="3820" y="1502" class="text-title" font-size="18">RECLAMO</text>
+      <text x="3750" y="1530" class="text-desc">Exigencia de solución a problema</text>
+      
+      <!-- Sugerencia -->
+      <rect x="3700" y="1570" width="850" height="80" fill="#F5F3FF" stroke="#8B5CF6" stroke-width="2" rx="8"/>
+      <text x="3750" y="1600" class="icon-text" font-size="28">💡</text>
+      <text x="3820" y="1602" class="text-title" font-size="18">SUGERENCIA</text>
+      <text x="3750" y="1630" class="text-desc">Propuesta de mejora</text>
+    </g>
+  </g>
+
+  <!-- COMPONENTES GLOBALES -->
+  <g id="componentes-globales">
+    <rect x="50" y="1850" width="2500" height="60" fill="#6366F1" rx="8"/>
+    <text x="1300" y="1890" text-anchor="middle" fill="white" font-size="24" font-weight="bold">🧩 COMPONENTES GLOBALES (Todas las páginas)</text>
+
+    <!-- Navbar -->
+    <g id="component-navbar">
+      <rect x="100" y="1950" width="750" height="220" fill="white" stroke="#6366F1" stroke-width="3" rx="12"/>
+      <text x="475" y="1990" text-anchor="middle" class="icon-text">🧭</text>
+      <text x="475" y="2025" text-anchor="middle" class="text-title" font-size="18">NAVBAR</text>
+      <text x="150" y="2060" class="text-desc" font-size="13">Barra superior presente en todas</text>
+      <text x="150" y="2078" class="text-desc" font-size="13">las pantallas:</text>
+      <text x="150" y="2100" class="text-desc" font-size="13">• Logo "Sistema PQRS"</text>
+      <text x="150" y="2118" class="text-desc" font-size="13">• Botón "Consultar Radicado"</text>
+      <text x="150" y="2136" class="text-desc" font-size="13">• Dashboard (seg��n rol)</text>
+      <text x="150" y="2154" class="text-desc" font-size="13">• Login/Logout/Nombre usuario</text>
+    </g>
+
+    <!-- Chatbot -->
+    <g id="component-chatbot">
+      <rect x="900" y="1950" width="750" height="220" fill="white" stroke="#06B6D4" stroke-width="3" rx="12"/>
+      <text x="1275" y="1990" text-anchor="middle" class="icon-text">💬</text>
+      <text x="1275" y="2025" text-anchor="middle" class="text-title" font-size="18">CHATBOT FLOTANTE</text>
+      <text x="950" y="2060" class="text-desc" font-size="13">Asistente en esquina inferior</text>
+      <text x="950" y="2078" class="text-desc" font-size="13">izquierda:</text>
+      <text x="950" y="2100" class="text-desc" font-size="13">• Menú en abanico (4 opciones)</text>
+      <text x="950" y="2118" class="text-desc" font-size="13">• Chat interactivo por sección</text>
+      <text x="950" y="2136" class="text-desc" font-size="13">• Animaciones Motion</text>
+      <text x="950" y="2154" class="text-desc" font-size="13">• Responsive mobile/desktop</text>
+    </g>
+
+    <!-- Notificaciones -->
+    <g id="component-notifications">
+      <rect x="1700" y="1950" width="750" height="220" fill="white" stroke="#14B8A6" stroke-width="3" rx="12"/>
+      <text x="2075" y="1990" text-anchor="middle" class="icon-text">🔔</text>
+      <text x="2075" y="2025" text-anchor="middle" class="text-title" font-size="18">NOTIFICACIONES</text>
+      <text x="1750" y="2060" class="text-desc" font-size="13">Sistema de toasts con Sonner:</text>
+      <text x="1750" y="2080" class="text-desc" font-size="13">• Toast de éxito (verde)</text>
+      <text x="1750" y="2098" class="text-desc" font-size="13">• Toast de error (rojo)</text>
+      <text x="1750" y="2116" class="text-desc" font-size="13">• Toast informativo (azul)</text>
+      <text x="1750" y="2134" class="text-desc" font-size="13">• Posición: Top-right</text>
+      <text x="1750" y="2152" class="text-desc" font-size="13">• Auto-dismiss después de 4s</text>
+    </g>
+  </g>
+
+  <!-- FLUJO DE TRABAJO PRINCIPAL -->
+  <g id="flujo-trabajo">
+    <rect x="50" y="2250" width="4700" height="60" fill="#F59E0B" rx="8"/>
+    <text x="2400" y="2290" text-anchor="middle" fill="white" font-size="24" font-weight="bold">🔄 FLUJO DE TRABAJO PRINCIPAL</text>
+
+    <!-- Flujo 1: Usuario Anónimo -->
+    <g id="flujo-anonimo">
+      <rect x="100" y="2350" width="1400" height="350" fill="white" stroke="#3B82F6" stroke-width="3" rx="12"/>
+      <text x="800" y="2390" text-anchor="middle" class="text-label" font-size="18">Usuario Anónimo Crea PQRS</text>
+      
+      <circle cx="200" cy="2440" r="30" fill="#3B82F6"/>
+      <text x="200" y="2450" text-anchor="middle" fill="white" font-weight="bold" font-size="18">1</text>
+      <text x="250" y="2450" class="text-desc">Accede al sistema (HOME)</text>
+      
+      <path d="M 200 2470 L 200 2500" stroke="#3B82F6" stroke-width="3" marker-end="url(#arrowBlue)"/>
+      
+      <circle cx="200" cy="2530" r="30" fill="#3B82F6"/>
+      <text x="200" y="2540" text-anchor="middle" fill="white" font-weight="bold" font-size="18">2</text>
+      <text x="250" y="2540" class="text-desc">Click "Crear PQRS"</text>
+      
+      <path d="M 200 2560 L 200 2590" stroke="#3B82F6" stroke-width="3" marker-end="url(#arrowBlue)"/>
+      
+      <circle cx="200" cy="2620" r="30" fill="#3B82F6"/>
+      <text x="200" y="2630" text-anchor="middle" fill="white" font-weight="bold" font-size="18">3</text>
+      <text x="250" y="2630" class="text-desc">Completa formulario y envía</text>
+      
+      <path d="M 230 2620 L 700 2620" stroke="#3B82F6" stroke-width="3" marker-end="url(#arrowBlue)"/>
+      
+      <rect x="700" y="2580" width="700" height="80" fill="#D1FAE5" stroke="#10B981" stroke-width="2" rx="8"/>
+      <text x="1050" y="2615" text-anchor="middle" class="text-title" font-size="16">✅ RECIBE RADICADO</text>
+      <text x="1050" y="2640" text-anchor="middle" class="text-desc" font-size="14">Formato: PQRS-2026-XXXX</text>
+    </g>
+
+    <!-- Flujo 2: Asignación Admin -->
+    <g id="flujo-admin">
+      <rect x="1550" y="2350" width="1500" height="350" fill="white" stroke="#EF4444" stroke-width="3" rx="12"/>
+      <text x="2300" y="2390" text-anchor="middle" class="text-label" font-size="18">Admin Asigna PQRS a Área</text>
+      
+      <circle cx="1650" cy="2440" r="30" fill="#EF4444"/>
+      <text x="1650" y="2450" text-anchor="middle" fill="white" font-weight="bold" font-size="18">1</text>
+      <text x="1700" y="2450" class="text-desc">Admin ve PQRS sin asignar</text>
+      
+      <path d="M 1650 2470 L 1650 2500" stroke="#EF4444" stroke-width="3" marker-end="url(#arrowRed)"/>
+      
+      <circle cx="1650" cy="2530" r="30" fill="#EF4444"/>
+      <text x="1650" y="2540" text-anchor="middle" fill="white" font-weight="bold" font-size="18">2</text>
+      <text x="1700" y="2540" class="text-desc">Selecciona área del dropdown</text>
+      
+      <path d="M 1650 2560 L 1650 2590" stroke="#EF4444" stroke-width="3" marker-end="url(#arrowRed)"/>
+      
+      <circle cx="1650" cy="2620" r="30" fill="#EF4444"/>
+      <text x="1650" y="2630" text-anchor="middle" fill="white" font-weight="bold" font-size="18">3</text>
+      <text x="1700" y="2630" class="text-desc">PQRS asignada automáticamente</text>
+      
+      <path d="M 1680 2620 L 2100 2620" stroke="#8B5CF6" stroke-width="3" marker-end="url(#arrowPurple)"/>
+      
+      <rect x="2100" y="2565" width="850" height="110" fill="#EDE9FE" stroke="#8B5CF6" stroke-width="2" rx="8"/>
+      <text x="2525" y="2600" text-anchor="middle" class="text-title" font-size="16">Usuario de Área Recibe</text>
+      <text x="2525" y="2625" text-anchor="middle" class="text-desc" font-size="13">• Estado cambia a "En Proceso"</text>
+      <text x="2525" y="2645" text-anchor="middle" class="text-desc" font-size="13">• Aparece en Dashboard del Área</text>
+      <text x="2525" y="2665" text-anchor="middle" class="text-desc" font-size="13">• Usuario puede responder</text>
+    </g>
+
+    <!-- Flujo 3: Usuario de Área Responde -->
+    <g id="flujo-area-responde">
+      <rect x="3100" y="2350" width="1550" height="350" fill="white" stroke="#8B5CF6" stroke-width="3" rx="12"/>
+      <text x="3875" y="2390" text-anchor="middle" class="text-label" font-size="18">Usuario de Área Resuelve PQRS</text>
+      
+      <circle cx="3200" cy="2440" r="30" fill="#8B5CF6"/>
+      <text x="3200" y="2450" text-anchor="middle" fill="white" font-weight="bold" font-size="18">1</text>
+      <text x="3250" y="2450" class="text-desc">Ve PQRS en su dashboard</text>
+      
+      <path d="M 3200 2470 L 3200 2500" stroke="#8B5CF6" stroke-width="3" marker-end="url(#arrowPurple)"/>
+      
+      <circle cx="3200" cy="2530" r="30" fill="#8B5CF6"/>
+      <text x="3200" y="2540" text-anchor="middle" fill="white" font-weight="bold" font-size="18">2</text>
+      <text x="3250" y="2540" class="text-desc">Selecciona y escribe respuesta</text>
+      
+      <path d="M 3200 2560 L 3200 2590" stroke="#8B5CF6" stroke-width="3" marker-end="url(#arrowPurple)"/>
+      
+      <circle cx="3200" cy="2620" r="30" fill="#8B5CF6"/>
+      <text x="3200" y="2630" text-anchor="middle" fill="white" font-weight="bold" font-size="18">3</text>
+      <text x="3250" y="2630" class="text-desc">Cambia estado y guarda</text>
+      
+      <path d="M 3230 2620 L 3700 2620" stroke="#10B981" stroke-width="3" marker-end="url(#arrowGreen)"/>
+      
+      <rect x="3700" y="2565" width="850" height="110" fill="#D1FAE5" stroke="#10B981" stroke-width="2" rx="8"/>
+      <text x="4125" y="2600" text-anchor="middle" class="text-title" font-size="16">✅ PQRS Resuelta</text>
+      <text x="4125" y="2625" text-anchor="middle" class="text-desc" font-size="13">• Usuario recibe respuesta</text>
+      <text x="4125" y="2645" text-anchor="middle" class="text-desc" font-size="13">• Estado: Resuelto/Cerrado</text>
+      <text x="4125" y="2665" text-anchor="middle" class="text-desc" font-size="13">• Visible en Consulta Radicado</text>
+    </g>
+  </g>
+
+  <!-- PROTECCIÓN DE RUTAS -->
+  <g id="proteccion-rutas">
+    <rect x="50" y="2750" width="4700" height="400" fill="white" stroke="#E2E8F0" stroke-width="2" rx="12"/>
+    <rect x="70" y="2770" width="4660" height="50" fill="#EF4444" rx="8"/>
+    <text x="2400" y="2805" text-anchor="middle" fill="white" font-size="22" font-weight="bold">🔒 PROTECCIÓN Y SEGURIDAD DE RUTAS</text>
+
+    <!-- Rutas Públicas -->
+    <g id="rutas-publicas">
+      <rect x="100" y="2860" width="1050" height="250" fill="#EFF6FF" stroke="#3B82F6" stroke-width="2" rx="8"/>
+      <text x="625" y="2895" text-anchor="middle" class="text-label" font-size="18" fill="#1E40AF">Rutas Públicas (Sin Login)</text>
+      <rect x="130" y="2910" width="990" height="30" fill="white" stroke="#3B82F6" stroke-width="1" rx="4"/>
+      <text x="625" y="2932" text-anchor="middle" class="text-route" font-size="14">/</text>
+      
+      <rect x="130" y="2950" width="990" height="30" fill="white" stroke="#3B82F6" stroke-width="1" rx="4"/>
+      <text x="625" y="2972" text-anchor="middle" class="text-route" font-size="14">/crear-pqrs</text>
+      
+      <rect x="130" y="2990" width="990" height="30" fill="white" stroke="#3B82F6" stroke-width="1" rx="4"/>
+      <text x="625" y="3012" text-anchor="middle" class="text-route" font-size="14">/consulta</text>
+      
+      <rect x="130" y="3030" width="990" height="30" fill="white" stroke="#3B82F6" stroke-width="1" rx="4"/>
+      <text x="625" y="3052" text-anchor="middle" class="text-route" font-size="14">/login</text>
+      
+      <rect x="130" y="3070" width="990" height="30" fill="white" stroke="#3B82F6" stroke-width="1" rx="4"/>
+      <text x="625" y="3092" text-anchor="middle" class="text-route" font-size="14">/registro</text>
+    </g>
+
+    <!-- Rutas Protegidas Usuario -->
+    <g id="rutas-usuario">
+      <rect x="1200" y="2860" width="1050" height="130" fill="#D1FAE5" stroke="#10B981" stroke-width="2" rx="8"/>
+      <text x="1725" y="2895" text-anchor="middle" class="text-label" font-size="18" fill="#065F46">Requiere Autenticación</text>
+      <rect x="1230" y="2910" width="990" height="30" fill="white" stroke="#10B981" stroke-width="1" rx="4"/>
+      <text x="1725" y="2932" text-anchor="middle" class="text-route" font-size="14">/dashboard</text>
+      <text x="1230" y="2975" class="text-desc" font-size="13">• Redirige a /login si no está autenticado</text>
+    </g>
+
+    <!-- Rutas Protegidas Área -->
+    <g id="rutas-area">
+      <rect x="2300" y="2860" width="1050" height="130" fill="#EDE9FE" stroke="#8B5CF6" stroke-width="2" rx="8"/>
+      <text x="2825" y="2895" text-anchor="middle" class="text-label" font-size="18" fill="#6B21A8">Solo Usuario de Área</text>
+      <rect x="2330" y="2910" width="990" height="30" fill="white" stroke="#8B5CF6" stroke-width="1" rx="4"/>
+      <text x="2825" y="2932" text-anchor="middle" class="text-route" font-size="14">/area</text>
+      <text x="2330" y="2975" class="text-desc" font-size="13">• Requiere rol: "area"</text>
+    </g>
+
+    <!-- Rutas Protegidas Admin -->
+    <g id="rutas-admin">
+      <rect x="3400" y="2860" width="1280" height="250" fill="#FEE2E2" stroke="#EF4444" stroke-width="2" rx="8"/>
+      <text x="4040" y="2895" text-anchor="middle" class="text-label" font-size="18" fill="#991B1B">Solo Administrador</text>
+      <rect x="3430" y="2910" width="1220" height="30" fill="white" stroke="#EF4444" stroke-width="1" rx="4"/>
+      <text x="4040" y="2932" text-anchor="middle" class="text-route" font-size="14">/admin</text>
+      
+      <rect x="3430" y="2950" width="1220" height="30" fill="white" stroke="#EF4444" stroke-width="1" rx="4"/>
+      <text x="4040" y="2972" text-anchor="middle" class="text-route" font-size="14">/gestion-areas</text>
+      
+      <text x="3430" y="3010" class="text-desc" font-size="13">• Requiere rol: "admin"</text>
+      <text x="3430" y="3030" class="text-desc" font-size="13">• Redirige a /dashboard si no es admin</text>
+      <text x="3430" y="3050" class="text-desc" font-size="13">• Acceso completo al sistema</text>
+      <text x="3430" y="3070" class="text-desc" font-size="13">• Gestión de áreas y usuarios</text>
+      <text x="3430" y="3090" class="text-desc" font-size="13">• Asignación de PQRS</text>
+    </g>
+  </g>
+
+  <!-- Footer -->
+  <g id="footer">
+    <rect x="50" y="3180" width="4700" height="1" fill="#E2E8F0"/>
+  </g>
+
+  <!-- Instrucciones para Figma -->
+  <g id="instrucciones-figma">
+    <rect x="2650" y="50" width="2100" height="120" fill="#FEF3C7" stroke="#F59E0B" stroke-width="3" rx="12"/>
+    <text x="3700" y="90" text-anchor="middle" font-size="18" font-weight="bold" fill="#92400E">📐 INSTRUCCIONES PARA FIGMA</text>
+    <text x="2700" y="115" font-size="14" fill="#78350F">1. Importa este archivo SVG en Figma (File → Import)</text>
+    <text x="2700" y="135" font-size="14" fill="#78350F">2. Todas las capas están organizadas y nombradas</text>
+    <text x="2700" y="155" font-size="14" fill="#78350F">3. Puedes editar textos, colores y posiciones libremente</text>
+  </g>
+</svg>
