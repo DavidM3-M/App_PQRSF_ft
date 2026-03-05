@@ -422,11 +422,27 @@ Contexto React que centraliza el estado de sesión:
 
 Configuración del router con `createBrowserRouter`. Incluye el guardia `ProtectedRoute` que soporta las variantes `adminOnly` y `areaOnly`.
 
-### `src/app/pages/AreaDashboard.tsx`
+### `src/app/pages/Home.tsx`
 
-> _Documentado el 2026-03-04._
+Landing pública con modal de radicación inline:
 
-Panel del funcionario de área. Ver la sección [`AreaDashboard`](#areadashboard--srcapppagesareadashboardtsx) de la primera parte de esta documentación para el detalle completo de estrategia de carga, estados, funciones y layout responsivo.
+- Formulario de envío de PQRSF sin necesidad de cuenta (anónimo).
+- Validación reCAPTCHA (bypass automático en entorno local).
+- Aceptación de términos y condiciones.
+- Soporte para adjuntar archivos.
+- **Modal de radicado exitoso** (2026-03-05): al completar la radicación se muestra un `Dialog` independiente con el número de radicado en formato grande, botón de **copiar al portapapeles** con feedback visual, y opciones para consultar el estado, radicar otra PQRS o cerrar. El modal del formulario se cierra automáticamente al abrirse el de éxito para evitar conflictos de z-index.
+
+### `src/app/pages/CrearPQRS.tsx`
+
+Formulario completo de radicación para usuarios autenticados o anónimos:
+
+- Campos de tipo, prioridad, asunto y descripción.
+- Campos de contacto opcionales para usuarios anónimos (nombre, apellido, tipo/número de documento, email, teléfono, ciudad).
+- **Modal de radicado exitoso** (2026-03-05): igual que en `Home.tsx`, reemplaza la vista de pantalla completa anterior. Muestra el número de radicado con botón de copia y mantiene el formulario en el fondo.
+
+### `index.html`
+
+- `lang="es"`, `translate="no"` y `<meta name="google" content="notranslate">` agregados (2026-03-05) para prevenir el error `removeChild` causado por extensiones de traducción automática (Google Translate) que modifican el DOM fuera del ciclo de React.
 
 ---
 
