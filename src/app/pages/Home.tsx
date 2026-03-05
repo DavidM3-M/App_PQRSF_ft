@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { FileText, Globe, Rocket, Award, ArrowRight, Search, Clock, Shield, Bell, AlertCircle, Lightbulb, X, CheckCircle, Users, Zap, Upload, Paperclip, UserX, FileCheck, ExternalLink } from "lucide-react";
+import { FileText, Globe, Rocket, Award, ArrowRight, Search, Clock, Shield, Bell, AlertCircle, Lightbulb, X, CheckCircle, Users, Zap, Upload, Paperclip, UserX, FileCheck, ExternalLink, Copy, Check } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
 import { useForm } from "react-hook-form";
@@ -38,6 +39,9 @@ export function Home() {
   const [selectedTipoPQRS, setSelectedTipoPQRS] = useState<PqrsType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [radicadoGenerado, setRadicadoGenerado] = useState<string | null>(null);
+  const [showRadicadoModal, setShowRadicadoModal] = useState(false);
+  const [copiedRadicado, setCopiedRadicado] = useState(false);
+  const navigate = useNavigate();
   const [archivosSeleccionados, setArchivosSeleccionados] = useState<File[]>([]);
   const [esAnonimo, setEsAnonimo] = useState(false);
   // Si CAPTCHA_DISABLED está activo (entorno local), se precarga un valor para bypass
@@ -89,10 +93,8 @@ export function Home() {
       );
       const radicado = result.numero_radicado ?? result.radicado ?? "";
       setRadicadoGenerado(radicado);
-      toast.success("PQRS radicada exitosamente", {
-        description: `Su número de radicado es: ${radicado}`,
-        duration: 5000,
-      });
+      setSelectedTipoPQRS(null); // cierra el modal del formulario
+      setShowRadicadoModal(true);
     } catch (err) {
       toast.error("Error al radicar PQRS", { description: formatApiError(err) });
     } finally {
@@ -111,9 +113,18 @@ export function Home() {
   const handleCloseFormModal = () => {
     setSelectedTipoPQRS(null);
     setRadicadoGenerado(null);
+    setShowRadicadoModal(false);
     setArchivosSeleccionados([]);
     setEsAnonimo(false);
     reset();
+  };
+
+  const handleCopyRadicado = () => {
+    if (!radicadoGenerado) return;
+    navigator.clipboard.writeText(radicadoGenerado).then(() => {
+      setCopiedRadicado(true);
+      setTimeout(() => setCopiedRadicado(false), 2000);
+    });
   };
 
   const tiposPQRS = [
@@ -814,13 +825,6 @@ export function Home() {
                         </motion.div>
                       </div>
                     </form>
-
-                    {radicadoGenerado && (
-                      <div className="mt-8 border-l-4 text-green-700 p-4" style={{ backgroundColor: "#e8f5e9", borderColor: "#4caf50" }} role="alert">
-                        <p className="font-bold">PQRS radicada exitosamente</p>
-                        <p className="mt-2">Su número de radicado es: <strong>{radicadoGenerado}</strong></p>
-                      </div>
-                    )}
                   </div>
                 </motion.div>
               </div>
@@ -829,6 +833,50 @@ export function Home() {
         })()}
       </AnimatePresence>
       , document.body)}
+
+      {/* ─── Modal Radicado Exitoso (fuera del portal del formulario) ─── */}
+      <Dialog open={showRadicadoModal} onOpenChange={(open) => { if (!open) { setShowRadicadoModal(false); setSelectedTipoPQRS(null); setRadicadoGenerado(null); reset(); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="text-center items-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 mb-2">
+              <CheckCircle className="h-10 w-10 text-green-600" />
+            </div>
+            <DialogTitle className="text-green-900 text-xl">¡PQRS Radicada Exitosamente!</DialogTitle>
+            <DialogDescription>
+              Su solicitud será procesada en un plazo de hasta{" "}
+              <strong>15 días hábiles</strong> según la Ley 1755 de 2015.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-5 text-center my-2">
+            <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Número de Radicado</p>
+            <p className="text-3xl font-bold text-blue-600 tracking-wider mb-3">{radicadoGenerado}</p>
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleCopyRadicado}>
+              {copiedRadicado ? (
+                <><Check className="h-4 w-4 text-green-600" /> ¡Copiado!</>
+              ) : (
+                <><Copy className="h-4 w-4" /> Copiar radicado</>
+              )}
+            </Button>
+          </div>
+
+          <p className="text-xs text-center text-gray-500">
+            Guarde este número. Lo necesitará para consultar el estado de su solicitud.
+          </p>
+
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+            <Button className="w-full bg-[#ff9800] hover:bg-[#f57c00] text-white font-bold" onClick={() => { handleCloseFormModal(); navigate("/consulta"); }}>
+              Consultar Estado
+            </Button>
+            <Button variant="outline" className="w-full" onClick={handleCloseFormModal}>
+              Radicar Otra PQRS
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={handleCloseFormModal}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Información Importante */}
       <div className="bg-[#e8f0f7] py-16">

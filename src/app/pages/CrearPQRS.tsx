@@ -8,7 +8,15 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { FileText, CheckCircle2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "../components/ui/dialog";
+import { FileText, CheckCircle2, Copy, Check } from "lucide-react";
 import {
   apiCreatePQRS,
   formatApiError,
@@ -50,6 +58,8 @@ export function CrearPQRS() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [radicadoGenerado, setRadicadoGenerado] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const {
     register,
@@ -85,9 +95,7 @@ export function CrearPQRS() {
       );
       const numeroRadicado = result.numero_radicado ?? result.radicado ?? "";
       setRadicadoGenerado(numeroRadicado);
-      toast.success("¡PQRS radicada exitosamente!", {
-        description: `Número de radicado: ${numeroRadicado}`,
-      });
+      setShowModal(true);
     } catch (err) {
       toast.error("Error al radicar PQRS", { description: formatApiError(err) });
     } finally {
@@ -98,52 +106,74 @@ export function CrearPQRS() {
   const selectCls =
     "flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2";
 
-  if (radicadoGenerado) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-12">
-        <Card className="border-green-200 bg-green-50">
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <CheckCircle2 className="h-10 w-10 text-green-600" />
-              </div>
-            </div>
-            <CardTitle className="text-green-900">¡PQRS Radicada Exitosamente!</CardTitle>
-            <CardDescription className="text-green-700">
-              Su solicitud ha sido recibida y será procesada
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="rounded-lg bg-white p-6 text-center">
-              <p className="text-sm text-gray-600 mb-2">Número de Radicado</p>
-              <p className="text-2xl font-bold text-blue-600">{radicadoGenerado}</p>
-            </div>
-            <div className="space-y-2 text-sm text-gray-700">
-              <p>
-                <strong>Importante:</strong> Guarde este número para consultar el estado de su solicitud.
-              </p>
-              <p>Recibirá notificaciones al correo proporcionado sobre el avance de su PQRS.</p>
-              <p>El tiempo de respuesta puede ser de hasta <strong>15 días hábiles</strong> según la Ley 1755 de 2015.</p>
-            </div>
-            <div className="flex flex-col gap-3 pt-4">
-              <Button onClick={() => navigate("/consulta")} className="w-full bg-[#ff9800] hover:bg-[#f57c00] text-white font-bold">
-                Consultar Estado
-              </Button>
-              <Button variant="outline" onClick={() => { setRadicadoGenerado(null); reset(); }} className="w-full">
-                Radicar Otra PQRS
-              </Button>
-              <Button variant="ghost" onClick={() => navigate("/")} className="w-full">
-                Volver al Inicio
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const handleCopy = () => {
+    if (!radicadoGenerado) return;
+    navigator.clipboard.writeText(radicadoGenerado).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
-  return (
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setRadicadoGenerado(null);
+    reset();
+  };  return (
     <div className="mx-auto max-w-3xl px-4 py-12">
+      {/* ── Modal de radicado exitoso ───────────────────────────── */}
+      <Dialog open={showModal} onOpenChange={(open) => { if (!open) handleCloseModal(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="text-center items-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 mb-2">
+              <CheckCircle2 className="h-10 w-10 text-green-600" />
+            </div>
+            <DialogTitle className="text-green-900 text-xl">¡PQRS Radicada Exitosamente!</DialogTitle>
+            <DialogDescription>
+              Su solicitud ha sido recibida y será procesada en un plazo de hasta{" "}
+              <strong>15 días hábiles</strong> según la Ley 1755 de 2015.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Número de radicado + copiar */}
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-5 text-center my-2">
+            <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Número de Radicado</p>
+            <p className="text-3xl font-bold text-blue-600 tracking-wider mb-3">{radicadoGenerado}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <><Check className="h-4 w-4 text-green-600" /> ¡Copiado!</>
+              ) : (
+                <><Copy className="h-4 w-4" /> Copiar radicado</>
+              )}
+            </Button>
+          </div>
+
+          <p className="text-xs text-center text-gray-500">
+            Guarde este número. Lo necesitará para consultar el estado de su solicitud.
+          </p>
+
+          <DialogFooter className="flex flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full bg-[#ff9800] hover:bg-[#f57c00] text-white font-bold"
+              onClick={() => navigate("/consulta")}
+            >
+              Consultar Estado
+            </Button>
+            <Button variant="outline" className="w-full" onClick={handleCloseModal}>
+              Radicar Otra PQRS
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
+              Volver al Inicio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Formulario ─────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3 mb-2">
