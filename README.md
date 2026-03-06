@@ -422,6 +422,14 @@ Contexto React que centraliza el estado de sesión:
 
 Configuración del router con `createBrowserRouter`. Incluye el guardia `ProtectedRoute` que soporta las variantes `adminOnly` y `areaOnly`.
 
+### `src/app/pages/GestionAreas.tsx`
+
+CRUD de dependencias/áreas organizacionales y gestión de sus encargados. Solo accesible por administradores.
+
+- Crear, editar, activar/desactivar y eliminar áreas.
+- Modal **"Gestionar Usuarios"** — asigna el campo `dependency` del perfil del usuario (membresía organizacional, no otorga acceso a PQRSF por sí solo).
+- Modal **"Encargados PQRS"** — crea registros `DependencyManager` via `POST /api/pqrs/dependencies/{depId}/managers/`. Esta es la única acción que concede al usuario visibilidad sobre las PQRSF del área en el backend. Al asignar también actualiza `user.dependency` para que el frontend detecte el rol `"area"` correctamente. Al desactivar un encargado, revoca `user.dependency` si ya no tiene managers activos.
+
 ### `src/app/pages/Home.tsx`
 
 Landing pública con modal de radicación inline:
@@ -446,13 +454,72 @@ Formulario completo de radicación para usuarios autenticados o anónimos:
 
 ---
 
+## Cambios recientes
+
+### 2026-03-06 — Corrección crítica: encargado de área no veía PQRSF
+
+#### Diagnóstico del bug
+
+El flujo de asignación de encargados de área involucra dos operaciones independientes en el backend:
+
+| Operación | Endpoint | Efecto |
+|---|---|---|
+| Crear `DependencyManager` | `POST /api/pqrs/dependencies/{depId}/managers/` | Concede acceso a PQRSF en el backend (`_get_managed_dep_ids`) |
+| Actualizar perfil del usuario | `PATCH /api/users/{id}/` `{ dependency }` | Permite al frontend detectar el rol `"area"` y conocer el `dependencyId` |
+
+La UI anterior solo ejecutaba la primera operación al usar el botón **"Encargados"**, dejando el perfil del usuario con `dependency: null`. Al iniciar sesión, `mapApiUser` veía `hasDep = false` → asignaba `rol = "usuario"` → `DashboardGuard` redirigía a `UserDashboard` → el encargado nunca llegaba a `AreaDashboard`.
+
+Además, aunque llegara, `cargarPQRS` en `AreaDashboard` filtraba por `usuario.dependencyId`, que también quedaba vacío.
+
+#### Correcciones en `GestionAreas.tsx`
+
+**`handleAssignEncargado`** — ahora ejecuta ambas operaciones en secuencia:
+
+```typescript
+await apiAssignManager(encargadosAreaId, userId);          // DependencyManager → acceso backend
+await apiUpdateUser(userId, { dependency: encargadosAreaId }); // perfil → rol "area" en frontend
+```
+
+**`handleRemoveEncargado`** — al desactivar un manager, si el usuario ya no tiene managers activos en el área, limpia su `dependency`:
+
+```typescript
+await apiRemoveManager(encargadosAreaId, managerId);
+if (remaining.length === 0) {
+  await apiUpdateUser(targetUserId, { dependency: null });
+}
+```
+
+#### Mejoras de UX en `GestionAreas.tsx`
+
+- El botón **"Encargados"** fue renombrado a **"Encargados PQRS"** con icono `ShieldCheck` y estilo primario azul para diferenciarlo claramente del botón "Usuarios".
+- El modal **"Gestionar Usuarios"** muestra un banner informativo advirtiendo que asignar un usuario al área solo establece membresía organizacional y **no** otorga acceso a PQRSF.
+- El modal **"Encargados PQRS"** muestra un banner explicando que esta es la acción que concede visibilidad real sobre PQRSF (ver, responder, cambiar estado).
+- La sección "Asignar nuevo encargado" incluye descripción contextual indicando el área sobre la que tendrá acceso el usuario.
+
+#### Flujo correcto post-corrección
+
+```
+Admin → botón "Encargados PQRS" → "Asignar"
+  ↓ crea DependencyManager  (backend filtra PQRSF por _get_managed_dep_ids)
+  ↓ actualiza user.dependency (frontend detecta rol "area" en AuthContext)
+  ↓
+Encargado inicia sesión
+  ↓ apiGetPerfil() → dependency != null → rol = "area"
+  ↓ DashboardGuard → /area → AreaDashboard
+  ↓ cargarPQRS() filtra por dependencyId → lista PQRSF del área ✅
+```
+
+---
+
 ## Roles de usuario
 
-| Rol | Acceso |
-|---|---|
-| `usuario` | Radicación, consulta y dashboard personal |
-| `area` | Dashboard de área, gestión de PQRS asignadas |
-| `admin` | Todas las rutas anteriores + AdminDashboard y GestionAreas |
+| Rol | Condición de asignación | Acceso |
+|---|---|---|
+| `usuario` | Sin `dependency` y sin `is_staff` | Radicación, consulta y dashboard personal |
+| `area` | Tiene `dependency` asignada en el perfil y no es staff | Dashboard de área, gestión de PQRSF del área |
+| `admin` | `is_staff === true` o tiene rol `ADMIN` | Todas las rutas anteriores + AdminDashboard, GestionAreas, GestionRoles, GestionSLA |
+
+> **Nota:** El rol `"area"` requiere que el administrador use el botón **"Encargados PQRS"** en Gestión de Áreas. Este botón crea el `DependencyManager` (acceso backend) y actualiza el campo `dependency` del perfil (detección de rol en el frontend). Usar solo el botón "Usuarios" asigna membresía organizacional pero **no** activa el rol `"area"`.
 
 ---
 

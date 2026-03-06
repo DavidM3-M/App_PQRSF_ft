@@ -9,7 +9,7 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
-import { Building2, Plus, Edit, Trash2, Users, X, Loader2, Search } from "lucide-react";
+import { Building2, Plus, Edit, Trash2, Users, X, Loader2, Search, ShieldCheck, Info } from "lucide-react";
 import {
   apiListDependencies,
   apiCreateDependency,
@@ -505,12 +505,12 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
-                      className="text-blue-700 border-blue-200"
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
                       onClick={() => handleOpenEncargados(area.id)}
+                      title="Asignar encargados con acceso a PQRS del área"
                     >
-                      <Users className="h-3 w-3 mr-1" />
-                      Encargados
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      Encargados PQRS
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => handleToggleActive(area)}>
                       {area.active ? "Desactivar" : "Activar"}
@@ -538,10 +538,14 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Gestionar Usuarios</CardTitle>
+                  <CardTitle>Gestionar Usuarios del Área</CardTitle>
                   <CardDescription>
                     {areas.find(a => a.id === selectedAreaId)?.name}
                   </CardDescription>
+                  <div className="flex items-start gap-1.5 mt-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
+                    <Info className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-700">Esto asigna el área al perfil del usuario (membresía organizacional). Para que el usuario pueda <strong>ver y gestionar PQRS</strong>, use el botón <strong>"Encargados PQRS"</strong>.</p>
+                  </div>
                 </div>
                 <Button
                   variant="ghost"
@@ -637,10 +641,17 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Encargados del Área</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5 text-blue-600" />
+                    Encargados PQRS
+                  </CardTitle>
                   <CardDescription>
-                    {areas.find(a => a.id === encargadosAreaId)?.name} — Gestione quién puede administrar PQRS de esta área
+                    {areas.find(a => a.id === encargadosAreaId)?.name}
                   </CardDescription>
+                  <div className="flex items-start gap-1.5 mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                    <ShieldCheck className="h-3.5 w-3.5 text-blue-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-blue-700">Los encargados asignados aquí pueden <strong>ver, responder y cambiar el estado</strong> de las PQRS asignadas a esta área. Esta es la única forma de conceder acceso real a las PQRS.</p>
+                  </div>
                 </div>
                 <Button variant="ghost" size="icon" onClick={() => { setShowEncargadosModal(false); setEncargadosAreaId(null); setBusquedaEncargados(""); }}>
                   <X className="h-4 w-4" />
@@ -697,7 +708,8 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
 
                   {/* Assign new manager */}
                   <div className="border-t pt-4">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Asignar nuevo encargado</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-1">Asignar nuevo encargado</h4>
+                    <p className="text-xs text-gray-500 mb-3">El usuario asignado podrá iniciar sesión como encargado de área y ver las PQRS de <strong>{areas.find(a => a.id === encargadosAreaId)?.name}</strong>.</p>
                     {/* Buscador */}
                     <div className="relative mb-3">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
