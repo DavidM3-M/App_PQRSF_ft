@@ -70,26 +70,29 @@ export const areasMock: Area[] = [
 ];
 
 // Usuarios mock
+// NOTA DE SEGURIDAD: No incluir contraseñas reales. La autenticación siempre
+// debe realizarse a través de la API real (/api/login/). Estos datos son solo
+// para referencia de estructura y pruebas de UI sin conexión al backend.
 export const usuariosMock: Usuario[] = [
   {
     id: "1",
     nombre: "Administrador",
     email: "admin@pqrs.com",
-    password: "admin123",
+    password: "",
     rol: "admin",
   },
   {
     id: "2",
     nombre: "Juan Pérez",
     email: "juan@correo.com",
-    password: "usuario123",
+    password: "",
     rol: "usuario",
   },
   {
     id: "3",
     nombre: "María Rodríguez",
     email: "maria.area@pqrs.com",
-    password: "area123",
+    password: "",
     rol: "area",
     areaId: "area-1",
   },
@@ -97,7 +100,7 @@ export const usuariosMock: Usuario[] = [
     id: "4",
     nombre: "Carlos López",
     email: "carlos.area@pqrs.com",
-    password: "area123",
+    password: "",
     rol: "area",
     areaId: "area-2",
   },
@@ -196,12 +199,16 @@ export function generarRadicado(): string {
 }
 
 export function getPQRSByRadicado(radicado: string): PQRS | undefined {
-  const pqrs = localStorage.getItem("pqrs");
-  if (pqrs) {
-    const listaPQRS: PQRS[] = JSON.parse(pqrs);
-    return listaPQRS.find(
-      (p) => p.radicado.toLowerCase() === radicado.toLowerCase()
-    );
+  try {
+    const pqrs = localStorage.getItem("pqrs");
+    if (pqrs) {
+      const listaPQRS: PQRS[] = JSON.parse(pqrs);
+      return listaPQRS.find(
+        (p) => p.radicado.toLowerCase() === radicado.toLowerCase()
+      );
+    }
+  } catch {
+    localStorage.removeItem("pqrs");
   }
   return pqrsMock.find(
     (p) => p.radicado.toLowerCase() === radicado.toLowerCase()
@@ -209,18 +216,26 @@ export function getPQRSByRadicado(radicado: string): PQRS | undefined {
 }
 
 export function getPQRSByUsuario(usuarioId: string): PQRS[] {
-  const pqrs = localStorage.getItem("pqrs");
-  if (pqrs) {
-    const listaPQRS: PQRS[] = JSON.parse(pqrs);
-    return listaPQRS.filter((p) => p.usuarioId === usuarioId);
+  try {
+    const pqrs = localStorage.getItem("pqrs");
+    if (pqrs) {
+      const listaPQRS: PQRS[] = JSON.parse(pqrs);
+      return listaPQRS.filter((p) => p.usuarioId === usuarioId);
+    }
+  } catch {
+    localStorage.removeItem("pqrs");
   }
   return pqrsMock.filter((p) => p.usuarioId === usuarioId);
 }
 
 export function getAllPQRS(): PQRS[] {
-  const pqrs = localStorage.getItem("pqrs");
-  if (pqrs) {
-    return JSON.parse(pqrs);
+  try {
+    const pqrs = localStorage.getItem("pqrs");
+    if (pqrs) {
+      return JSON.parse(pqrs);
+    }
+  } catch {
+    localStorage.removeItem("pqrs");
   }
   // Inicializar localStorage con datos mock
   localStorage.setItem("pqrs", JSON.stringify(pqrsMock));
@@ -244,9 +259,13 @@ export function updatePQRS(id: string, updates: Partial<PQRS>): void {
 
 // Funciones para Áreas
 export function getAllAreas(): Area[] {
-  const areas = localStorage.getItem("areas");
-  if (areas) {
-    return JSON.parse(areas);
+  try {
+    const areas = localStorage.getItem("areas");
+    if (areas) {
+      return JSON.parse(areas);
+    }
+  } catch {
+    localStorage.removeItem("areas");
   }
   localStorage.setItem("areas", JSON.stringify(areasMock));
   return areasMock;
@@ -280,9 +299,13 @@ export function getAreaById(id: string): Area | undefined {
 
 // Funciones para usuarios
 export function getAllUsuarios(): Usuario[] {
-  const usuarios = localStorage.getItem("usuarios");
-  if (usuarios) {
-    return [...usuariosMock, ...JSON.parse(usuarios)];
+  try {
+    const usuarios = localStorage.getItem("usuarios");
+    if (usuarios) {
+      return [...usuariosMock, ...JSON.parse(usuarios)];
+    }
+  } catch {
+    localStorage.removeItem("usuarios");
   }
   return usuariosMock;
 }

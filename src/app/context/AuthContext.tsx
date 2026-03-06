@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router";
 import {
   apiLogin,
   apiGoogleLogin,
@@ -129,8 +130,8 @@ function mapApiUser(u: UsuarioAPI): Usuario {
 interface AuthContextType {
   usuario: Usuario | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string; created?: boolean }>;
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; rol?: Usuario["rol"] }>;
+  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string; created?: boolean; rol?: Usuario["rol"] }>;
   logout: () => void;
   refreshPerfil: () => Promise<void>;
   isAuthenticated: boolean;
@@ -153,6 +154,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [loading, setLoading] = useState(true); // bloquea el render hasta tener estado de sesión
+  const navigate = useNavigate();
+
+  // ── Escuchar evento de sesión expirada (emitido por apiFetch al recibir 401 irrecuperable) ──
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setUsuario(null);
+      navigate("/login", { replace: true });
+    };
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
+  }, [navigate]);
 
   // ── Restaurar sesión al montar el proveedor ────────────────────────────────
   useEffect(() => {
@@ -165,20 +177,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       apiGetPerfil()
         .then((u) => {
           const mapped = mapApiUser(u);
-          // Preservar is_staff y rol de admin del localStorage si era admin, igual que en el
-          // flujo de login. Evita que una inconsistencia puntual del backend degrade el
-          // rol de admin → area o usuario en cada recarga de página.
-          const mergedIsStaff = storedUser.is_staff || mapped.is_staff;
-          // Fusionar codigos de roles: los del perfil fresco + los almacenados (si los hay)
-          const storedRoles: string[] = storedUser.roles ?? [];
-          const freshRoles: string[] = u.roles ?? [];
-          const mergedRoles = [...new Set([...storedRoles, ...freshRoles])];
+          // El backend siempre es fuente de verdad — nunca elevar privilegios desde localStorage
+          const mergedIsStaff = mapped.is_staff;
+          const mergedRoles = u.roles ?? mapped.roles ?? [];
           const mergedIsAdmin = hasAdminPrivilege(mergedIsStaff, mergedRoles);
           const merged: Usuario = {
             ...mapped,
             is_staff: mergedIsStaff,
             rol: mergedIsAdmin ? "admin" : mapped.rol,
-            roles: mergedRoles.length > 0 ? mergedRoles : mapped.roles,
+            roles: mergedRoles.length > 0 ? mergedRoles : undefined,
           };
           setUsuario(merged);
           localStorage.setItem("usuario", JSON.stringify(merged));
@@ -214,27 +221,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const loginData = await apiLogin(email, password); // 1. Auth + tokens + datos usuario
 
       const loginIsAdmin = hasAdminPrivilege(loginData.is_staff, loginData.roles);
+      let loginRol: Usuario["rol"] = "usuario";
 
       if (loginIsAdmin) {
         // Admin: rol determinado desde el login, no necesitamos otra llamada
         const mapped = mapLoginUser(loginData);
+        loginRol = mapped.rol;
         setUsuario(mapped);
         localStorage.setItem("usuario", JSON.stringify(mapped));
         // Refresco en background para rellenar campos opcionales del perfil.
-        // IMPORTANTE: se preservan is_staff y roles del login para evitar que una
-        // inconsistencia puntual del backend degrade el rol de admin.
+        // El backend es siempre fuente de verdad en el refresco.
         apiGetPerfil()
           .then(p => {
             const full = mapApiUser(p);
-            // Fusionar privilegios: si el login los reportó, se mantienen
-            const mergedIsStaff = loginData.is_staff || full.is_staff;
-            const mergedRoles = [...new Set([...(loginData.roles ?? []), ...(p.roles ?? [])])];
-            const mergedIsAdmin = hasAdminPrivilege(mergedIsStaff, mergedRoles);
+            // El perfil fresco del backend es la fuente de verdad
+            const freshIsStaff = full.is_staff;
+            const freshRoles = p.roles ?? full.roles ?? [];
+            const freshIsAdmin = hasAdminPrivilege(freshIsStaff, freshRoles);
             const merged: Usuario = {
               ...full,
-              is_staff: mergedIsStaff,
-              rol: mergedIsAdmin ? "admin" : full.rol,
-              roles: mergedRoles.length > 0 ? mergedRoles : full.roles,
+              is_staff: freshIsStaff,
+              rol: freshIsAdmin ? "admin" : full.rol,
+              roles: freshRoles.length > 0 ? freshRoles : undefined,
             };
             setUsuario(merged);
             localStorage.setItem("usuario", JSON.stringify(merged));
@@ -242,15 +250,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .catch(() => { /* ignorar: el usuario ya está seteado */ });
       } else {
         // No-admin: necesitamos apiGetPerfil para obtener la dependencia (rol "area" vs "usuario")
-        // También fusionamos los roles del login por si el endpoint de perfil no los devuelve.
         const perfil = await apiGetPerfil();
-        const mergedRoles = [...new Set([...(loginData.roles ?? []), ...(perfil.roles ?? [])])];
-        const mapped = mapApiUser({ ...perfil, roles: mergedRoles });
+        const mapped = mapApiUser(perfil);
+        loginRol = mapped.rol;
         setUsuario(mapped);
         localStorage.setItem("usuario", JSON.stringify(mapped));
       }
 
-      return { ok: true };
+      return { ok: true, rol: loginRol };
     } catch (err) {
       return { ok: false, error: formatApiError(err) };
     }
@@ -270,11 +277,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const googleData = await apiGoogleLogin(credential);
       const perfil = await apiGetPerfil();
-      const mergedRoles: string[] = perfil.roles ?? [];
-      const mapped = mapApiUser({ ...perfil, roles: mergedRoles });
+      const mapped = mapApiUser(perfil);
       setUsuario(mapped);
       localStorage.setItem("usuario", JSON.stringify(mapped));
-      return { ok: true, created: googleData.created };
+      return { ok: true, created: googleData.created, rol: mapped.rol };
     } catch (err) {
       return { ok: false, error: formatApiError(err) };
     }

@@ -14,6 +14,7 @@ import { AreaDashboard } from "./pages/AreaDashboard";
 import { GestionAreas } from "./pages/GestionAreas";
 import { GestionRoles } from "./pages/GestionRoles";
 import { GestionSLA } from "./pages/GestionSLA";
+import { Perfil } from "./pages/Perfil";
 import { NotFound } from "./pages/NotFound";
 
 // ── Spinner compartido ────────────────────────────────────────────────────────
@@ -150,6 +151,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute adminOnly>
             <GestionSLA />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "perfil",
+        element: (
+          <ProtectedRoute>
+            <Perfil />
           </ProtectedRoute>
         ),
       },

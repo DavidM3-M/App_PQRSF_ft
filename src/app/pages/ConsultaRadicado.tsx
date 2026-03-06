@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
+import { useNavigate, Link } from "react-router";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
-import { Search, FileText, Calendar, Clock, MessageSquare, User } from "lucide-react";
+import { Search, FileText, Calendar, Clock, MessageSquare, User, Mail, LogIn } from "lucide-react";
 import {
   apiConsultarRadicado,
   apiListPQRS,
@@ -26,11 +27,26 @@ interface ConsultaForm {
   radicado: string;
 }
 
+interface EmailVerifForm {
+  email: string;
+}
+
+/** Detecta si el error del backend indica que se requiere email para consultar. */
+function isEmailRequiredError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  return msg.includes("correo") || msg.includes("email");
+}
+
 export function ConsultaRadicado() {
   const { usuario } = useAuth();
+  const navigate = useNavigate();
   const [pqrs, setPqrs] = useState<PqrsAPI | null>(null);
   const [responses, setResponses] = useState<PqrsResponseAPI[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Estado para el flujo de verificación por email
+  const [requiresEmail, setRequiresEmail] = useState(false);
+  const [pendingRadicado, setPendingRadicado] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const {
     register,
@@ -38,17 +54,24 @@ export function ConsultaRadicado() {
     formState: { errors },
   } = useForm<ConsultaForm>();
 
+  const {
+    register: registerEmail,
+    handleSubmit: handleSubmitEmail,
+    formState: { errors: emailErrors },
+    setError: setEmailError,
+  } = useForm<EmailVerifForm>();
+
   const onSubmit = async (data: ConsultaForm) => {
     setIsLoading(true);
     setPqrs(null);
     setResponses([]);
+    setRequiresEmail(false);
 
     try {
       let result: PqrsAPI;
 
       if (usuario) {
         // Usuario autenticado: consultar a través del endpoint autenticado
-        // para no depender del campo email (el JWT identifica al usuario).
         const radicadoTrimmed = data.radicado.trim();
         const lista = await apiListPQRS({ search: radicadoTrimmed, page_size: 50 });
         const encontrada = lista.results.find(
@@ -62,31 +85,51 @@ export function ConsultaRadicado() {
           });
           return;
         }
-        // Obtener el detalle completo para incluir description y todos los campos
         result = await apiGetPQRS(encontrada.id);
       } else {
-        // Usuario anónimo: usar endpoint público con email si está disponible.
         result = await apiConsultarRadicado(data.radicado.trim());
       }
 
-      setPqrs(result);
-      // Load public responses
-      try {
-        const resp = await apiGetResponses(result.id);
-        setResponses(resp.results.filter(r => r.response_type !== "INTERNAL"));
-      } catch {
-        // responses might not be accessible publicly
-      }
-      toast.success("Radicado encontrado", {
-        description: "Se encontró la información de su solicitud",
-      });
+      await loadResult(result);
     } catch (err) {
-      toast.error("Radicado no encontrado", {
-        description: formatApiError(err),
-      });
+      if (!usuario && isEmailRequiredError(err)) {
+        // El backend indica que esta PQRS fue radicada con correo electrónico
+        setPendingRadicado(data.radicado.trim());
+        setRequiresEmail(true);
+      } else {
+        toast.error("Radicado no encontrado", { description: formatApiError(err) });
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /** Reintenta la consulta proporcionando el email de verificación. */
+  const onEmailSubmit = async (data: EmailVerifForm) => {
+    setIsVerifying(true);
+    try {
+      const result = await apiConsultarRadicado(pendingRadicado, data.email.trim());
+      setRequiresEmail(false);
+      await loadResult(result);
+    } catch (err) {
+      setEmailError("email", { message: "El correo no coincide con el registrado en esta PQRS." });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  /** Carga el resultado de una consulta exitosa y sus respuestas. */
+  const loadResult = async (result: PqrsAPI) => {
+    setPqrs(result);
+    try {
+      const resp = await apiGetResponses(result.id);
+      setResponses(resp.results.filter(r => r.response_type !== "INTERNAL"));
+    } catch {
+      // las respuestas pueden no ser accesibles públicamente
+    }
+    toast.success("Radicado encontrado", {
+      description: "Se encontró la información de su solicitud",
+    });
   };
 
   const getEstadoBadge = (status: string) => {
@@ -163,6 +206,108 @@ export function ConsultaRadicado() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Verificación de email requerida */}
+      <AnimatePresence>
+        {requiresEmail && !pqrs && (
+          <motion.div
+            key="email-required"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6"
+          >
+            <Card className="border-amber-200 bg-amber-50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100">
+                    <Mail className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-amber-900 text-base">
+                      Esta PQRS tiene un correo registrado
+                    </CardTitle>
+                    <CardDescription className="text-amber-700">
+                      Para consultarla, verifique su identidad ingresando el correo con el que fue radicada o inicie sesión.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Opción 1: verificar con correo */}
+                <form onSubmit={handleSubmitEmail(onEmailSubmit)} className="space-y-3">
+                  <Label htmlFor="email-verif" className="text-amber-900 font-medium">
+                    Ingresar correo electrónico
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="email-verif"
+                      type="email"
+                      placeholder="correo@ejemplo.com"
+                      className="flex-1 bg-white border-amber-300 focus-visible:ring-amber-400"
+                      {...registerEmail("email", {
+                        required: "El correo es requerido",
+                        pattern: {
+                          value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                          message: "Correo inválido",
+                        },
+                      })}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={isVerifying}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                    >
+                      {isVerifying ? "Verificando..." : "Verificar"}
+                    </Button>
+                  </div>
+                  {emailErrors.email && (
+                    <p className="text-sm text-red-600">{emailErrors.email.message}</p>
+                  )}
+                </form>
+
+                {/* Divisor */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-amber-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-amber-50 px-2 text-amber-600">o también</span>
+                  </div>
+                </div>
+
+                {/* Opción 2: iniciar sesión */}
+                <div className="rounded-lg bg-white border border-amber-200 p-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Iniciar sesión</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Acceda con su cuenta para consultar todas sus PQRS sin necesidad de correo.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0 gap-2 border-amber-400 text-amber-800 hover:bg-amber-50"
+                    onClick={() => navigate(`/login?redirect=/consulta`)}
+                  >
+                    <LogIn className="h-4 w-4" />
+                    Ingresar
+                  </Button>
+                </div>
+
+                <button
+                  type="button"
+                  className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900"
+                  onClick={() => setRequiresEmail(false)}
+                >
+                  Cancelar y buscar otro radicado
+                </button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Resultado */}
       <AnimatePresence>

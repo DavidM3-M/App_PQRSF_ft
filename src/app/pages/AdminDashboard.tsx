@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { Button } from "../components/ui/button";
@@ -11,12 +11,24 @@ import {
   AlertCircle, X, Building2, Search, Filter, ArrowLeft,
   User, Calendar, Loader2,
   ArrowUpCircle, Activity, MessageSquare,
+  BarChart2, Paperclip, Upload, Download, RefreshCw,
+  TrendingUp, ShieldAlert, Target, FileSpreadsheet, FileDown,
+  ChevronDown,
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip as RTooltip, Legend, Sector,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line, Area, AreaChart,
+} from "recharts";
 import {
   apiListPQRS, apiListDependencies, apiListUsers, apiListAllAssignments,
   apiAssignPQRS, apiPatchPQRS, apiRespondPQRS, apiUpdateEstado, apiEscalatePQRS,
   apiGetActivities, apiGetResponses, apiGetEscalations, apiGetAssignments, apiGetPQRS,
+  apiGetDashboard, apiGetAttachments, apiUploadAttachment,
+  apiExportCSV, apiExportExcel, ExportFilters,
   PqrsAPI, Dependency, UsuarioAPI, PqrsResponseAPI, PQRSActivity, PQRSEscalation, AssignmentAPI,
+  DashboardAPI, Attachment,
   PQRS_STATUS_LABEL, PQRS_TYPE_LABEL, PQRS_PRIORITY_LABEL,
   formatApiError,
 } from "../lib/api";
@@ -42,7 +54,7 @@ interface EscalateForm {
   notes: string;
 }
 
-type DetailTab = "respond" | "assign" | "escalate" | "history";
+type DetailTab = "respond" | "assign" | "escalate" | "history" | "adjuntos";
 
 const BADGE_CFG: Record<string, string> = {
   RAD: "bg-blue-100 text-blue-800",
@@ -93,6 +105,32 @@ export function AdminDashboard() {
   const [allAssignments, setAllAssignments] = useState<AssignmentAPI[]>([]);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [assignmentError, setAssignmentError] = useState(false);
+
+  // analytics
+  const [viewMode, setViewMode] = useState<"list" | "analytics">("list");
+  const [dashData, setDashData] = useState<DashboardAPI | null>(null);
+  const [dashLoading, setDashLoading] = useState(false);
+  // filtro de período para analíticas: días hacia atrás (0 = todos)
+  const [periodDays, setPeriodDays] = useState(30);
+  // índice activo (hover) en la dona de estados
+  const [activeEstadoIndex, setActiveEstadoIndex] = useState<number | undefined>(undefined);
+  // comparativa temporal
+  const [compMode,    setCompMode]    = useState<"monthly" | "year-vs-year" | "month-vs-month">("monthly");
+  const [compMetric,  setCompMetric]  = useState<"total" | "resueltas" | "enProceso">("total");
+  const [compYearA,   setCompYearA]   = useState("");
+  const [compYearB,   setCompYearB]   = useState("");
+  const [compMonthA,  setCompMonthA]  = useState("");
+  const [compMonthB,  setCompMonthB]  = useState("");
+
+  // attachments
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachLoading, setAttachLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // export report panel
+  const [showExport, setShowExport] = useState(false);
+  const [exporting, setExporting] = useState<"csv" | "excel" | null>(null);
+  const [exportFilters, setExportFilters] = useState<ExportFilters>({});
 
   const respondForm  = useForm<RespondForm>({ defaultValues: { response_type: "CITIZEN", new_status: "", content: "" } });
   const assignForm   = useForm<AssignForm>({ defaultValues: { responsible_user: "", dependency: "", notes: "" } });
@@ -178,6 +216,69 @@ export function AdminDashboard() {
     }
   }, []);
 
+  const loadDashboard = async () => {
+    if (dashLoading) return;
+    setDashLoading(true);
+    try {
+      const data = await apiGetDashboard();
+      setDashData(data);
+    } catch (e) {
+      toast.error("Error al cargar analytics", { description: formatApiError(e) });
+    } finally {
+      setDashLoading(false);
+    }
+  };
+
+  /** Dispara descarga del archivo recibido como Blob. */
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async (format: "csv" | "excel") => {
+    setExporting(format);
+    try {
+      const result = format === "csv"
+        ? await apiExportCSV(exportFilters)
+        : await apiExportExcel(exportFilters);
+      triggerDownload(result.blob, result.filename);
+      toast.success(`Reporte ${format.toUpperCase()} descargado correctamente`);
+    } catch (e) {
+      toast.error(`Error al exportar ${format.toUpperCase()}`, { description: formatApiError(e) });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const loadAttachments = async (pqrsId: string) => {
+    setAttachLoading(true);
+    try {
+      const res = await apiGetAttachments(pqrsId);
+      setAttachments((res as any).results ?? []);
+    } catch {
+      setAttachments([]);
+    } finally {
+      setAttachLoading(false);
+    }
+  };
+
+  const handleUploadFile = async (pqrsId: string, file: File) => {
+    setUploading(true);
+    try {
+      const newAtt = await apiUploadAttachment(pqrsId, file);
+      setAttachments(prev => [newAtt, ...prev]);
+      toast.success(`Archivo "${file.name}" adjuntado`);
+    } catch (e) {
+      toast.error("Error al subir archivo", { description: formatApiError(e) });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const loadAssignment = (p: PqrsAPI) => {
     setActiveAssignment(null);
     setAssignmentError(false);
@@ -236,6 +337,9 @@ export function AdminDashboard() {
     setActiveTab(tab);
     if (tab === "history" && selected && responses.length === 0 && activities.length === 0) {
       loadHistory(selected.id);
+    }
+    if (tab === "adjuntos" && selected) {
+      loadAttachments(selected.id);
     }
   };
 
@@ -424,6 +528,163 @@ export function AdminDashboard() {
     const uid = typeof u.dependency === "string" ? u.dependency : u.dependency?.id ?? "";
     return uid === selectedDepId;
   });
+
+  // ── Datos computados para gráficas (filtrados por período) ────────────────
+  const analyticsData = useMemo(() => {
+    const cutoff = periodDays > 0
+      ? new Date(Date.now() - periodDays * 86_400_000)
+      : null;
+
+    const filtered = cutoff
+      ? pqrsList.filter(p => new Date(p.created_at) >= cutoff)
+      : pqrsList;
+
+    // Por estado
+    const estadoMap: Record<string, number> = {};
+    for (const p of filtered) estadoMap[p.status] = (estadoMap[p.status] ?? 0) + 1;
+    const porEstado = Object.entries(estadoMap).map(([key, value]) => ({
+      name: PQRS_STATUS_LABEL[key as keyof typeof PQRS_STATUS_LABEL] ?? key,
+      value,
+      key,
+    }));
+
+    // Por tipo
+    const tipoMap: Record<string, number> = {};
+    for (const p of filtered) {
+      const t = p.type ?? p.pqrs_type ?? "?";
+      tipoMap[t] = (tipoMap[t] ?? 0) + 1;
+    }
+    const porTipo = Object.entries(tipoMap).map(([key, value]) => ({
+      name: PQRS_TYPE_LABEL[key as keyof typeof PQRS_TYPE_LABEL] ?? key,
+      value,
+    }));
+
+    // Por prioridad
+    const prioMap: Record<string, number> = {};
+    for (const p of filtered) {
+      const pr = p.priority ?? "?";
+      prioMap[pr] = (prioMap[pr] ?? 0) + 1;
+    }
+    const porPrioridad = Object.entries(prioMap).map(([key, value]) => ({
+      name: PQRS_PRIORITY_LABEL[key as keyof typeof PQRS_PRIORITY_LABEL] ?? key,
+      value,
+    }));
+
+    // Tendencia diaria (últimos periodDays días o todos)
+    const tendenciaMap: Record<string, { fecha: string; total: number; resueltas: number }> = {};
+    const days = periodDays > 0 ? periodDays : 90; // máx 90 días en gráfica
+    const tendenciaCutoff = new Date(Date.now() - days * 86_400_000);
+    for (const p of pqrsList) {
+      const d = new Date(p.created_at);
+      if (d < tendenciaCutoff) continue;
+      const key = d.toISOString().slice(0, 10);
+      if (!tendenciaMap[key]) tendenciaMap[key] = { fecha: key, total: 0, resueltas: 0 };
+      tendenciaMap[key].total++;
+      if (p.status === "RES" || p.status === "CER") tendenciaMap[key].resueltas++;
+    }
+    const tendencia = Object.values(tendenciaMap).sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+    // Por área
+    const areaMap: Record<string, number> = {};
+    for (const p of filtered) {
+      const areaName = typeof p.dependency === "object" && p.dependency
+        ? p.dependency.name
+        : sinAsignarIds.has(p.id) ? "Sin Asignar" : "Sin Asignar";
+      if (p.dependency) {
+        const n = typeof p.dependency === "object" ? p.dependency.name : "Área";
+        areaMap[n] = (areaMap[n] ?? 0) + 1;
+      } else {
+        areaMap["Sin Asignar"] = (areaMap["Sin Asignar"] ?? 0) + 1;
+      }
+    }
+    const porArea = Object.entries(areaMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    // KPIs
+    const total = filtered.length;
+    const resueltas = filtered.filter(p => p.status === "RES" || p.status === "CER").length;
+    const enProceso = filtered.filter(p => p.status === "PRO").length;
+    const anonimas  = filtered.filter(p => !p.user).length;
+    const tasaResolucion = total > 0 ? Math.round((resueltas / total) * 100) : 0;
+
+    return { porEstado, porTipo, porPrioridad, tendencia, porArea, total, resueltas, enProceso, anonimas, tasaResolucion };
+  }, [pqrsList, periodDays, sinAsignarIds]);
+
+  // ── Datos comparativos (independientes del período) ───────────────────────────
+  const comparativaData = useMemo(() => {
+    const MN = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+    // acumular por año-mes
+    const bk: Record<string, { total:number; resueltas:number; enProceso:number; radicadas:number }> = {};
+    for (const p of pqrsList) {
+      const d  = new Date(p.created_at);
+      const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      if (!bk[ym]) bk[ym] = { total:0, resueltas:0, enProceso:0, radicadas:0 };
+      bk[ym].total++;
+      if (p.status==="RES"||p.status==="CER") bk[ym].resueltas++;
+      if (p.status==="PRO") bk[ym].enProceso++;
+      if (p.status==="RAD") bk[ym].radicadas++;
+    }
+
+    const years  = [...new Set(Object.keys(bk).map(k=>k.slice(0,4)))].sort();
+    const months = Object.keys(bk).sort();
+
+    // vista mensual agregada (todos los meses en orden)
+    const monthly = months.map(ym => ({
+      periodo: ym,
+      label: `${MN[parseInt(ym.slice(5))-1]} ${ym.slice(2,4)}`,
+      ...bk[ym],
+    }));
+
+    // serie mensual para un año dado (12 puntos fijos)
+    const yearSeries = (yr: string) =>
+      Array.from({length:12},(_,i)=>{
+        const ym = `${yr}-${String(i+1).padStart(2,"0")}`;
+        return { mes: MN[i], ...(bk[ym]??{total:0,resueltas:0,enProceso:0,radicadas:0}) };
+      });
+
+    // serie diaria para un mes dado (ym = "YYYY-MM")
+    const daySeries = (ym: string) => {
+      const db: Record<number,{total:number;resueltas:number;enProceso:number}> = {};
+      for (const p of pqrsList) {
+        const d = new Date(p.created_at);
+        if (`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}` !== ym) continue;
+        const day = d.getDate();
+        if (!db[day]) db[day]={total:0,resueltas:0,enProceso:0};
+        db[day].total++;
+        if (p.status==="RES"||p.status==="CER") db[day].resueltas++;
+        if (p.status==="PRO") db[day].enProceso++;
+      }
+      const maxDay = Object.keys(db).length>0 ? Math.max(...Object.keys(db).map(Number)) : 0;
+      return Array.from({length:maxDay},(_,i)=>({ dia:i+1, ...(db[i+1]??{total:0,resueltas:0,enProceso:0}) }));
+    };
+
+    return { monthly, years, months, yearSeries, daySeries, MN };
+  }, [pqrsList]);
+
+  // Colores para las gráficas
+  const COLORS_ESTADO   = ["#3b82f6", "#f59e0b", "#22c55e", "#6b7280"];
+  const COLORS_TIPO     = ["#6366f1", "#ec4899", "#f97316", "#14b8a6", "#a855f7"];
+  const COLORS_PRIORIDAD= ["#22c55e", "#f59e0b", "#ef4444"];
+  const COLORS_AREA     = ["#3b82f6", "#8b5cf6", "#ec4899", "#f59e0b", "#14b8a6", "#6b7280"];
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+        {label && <p className="font-semibold text-gray-700 mb-1">{label}</p>}
+        {payload.map((p: any, i: number) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ background: p.color ?? p.fill }} />
+            <span className="text-gray-600">{p.name}:</span>
+            <span className="font-bold text-gray-900">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   // El endpoint de lista devuelve `submitter` (string); el detalle puede devolver user/anonymous_submitter
   const contactName = (p: PqrsAPI) => {
     if (p.user) return `${p.user.nombre} ${p.user.apellido}`.trim();
@@ -437,6 +698,7 @@ export function AdminDashboard() {
     { id: "assign",   label: "Asignar Área" },
     { id: "escalate", label: "Escalar"      },
     { id: "history",  label: "Historial"    },
+    { id: "adjuntos", label: "Adjuntos"     },
   ];
 
   return (
@@ -444,15 +706,161 @@ export function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header + admin quick-nav */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-              <LayoutDashboard className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+                <LayoutDashboard className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Panel de Administración</h1>
+                <p className="text-sm text-gray-500">Bienvenido, {usuario?.nombre}</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Panel de Administración</h1>
-              <p className="text-sm text-gray-500">Bienvenido, {usuario?.nombre}</p>
+            <div className="flex items-center gap-2">
+              {/* Export button */}
+              <button
+                onClick={() => setShowExport(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  showExport
+                    ? "bg-emerald-600 text-white shadow"
+                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <FileDown className="w-4 h-4" />
+                Exportar
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showExport ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Analytics toggle */}
+              <button
+                onClick={() => {
+                  const next = viewMode === "list" ? "analytics" : "list";
+                  setViewMode(next);
+                  if (next === "analytics" && !dashData && !dashLoading) loadDashboard();
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === "analytics"
+                    ? "bg-blue-600 text-white shadow"
+                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {viewMode === "analytics"
+                  ? <><LayoutDashboard className="w-4 h-4" /> Gestionar PQRS</>
+                  : <><BarChart2 className="w-4 h-4" /> Ver Analytics</>
+                }
+              </button>
             </div>
           </div>
+
+          {/* ── Export panel ────────────────────────────────────── */}
+          {showExport && (
+            <div className="bg-white border border-emerald-200 rounded-xl shadow-sm p-4 mb-2">
+              <div className="flex items-center gap-2 mb-3">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-semibold text-gray-800">Exportar Reportes PQRS</span>
+                <span className="ml-auto text-xs text-gray-400">Filtros opcionales</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+                {/* Estado */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Estado</label>
+                  <select
+                    value={exportFilters.status ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, status: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50"
+                  >
+                    <option value="">Todos</option>
+                    <option value="RAD">Radicado</option>
+                    <option value="PRO">En Proceso</option>
+                    <option value="RES">Resuelto</option>
+                    <option value="CER">Cerrado</option>
+                  </select>
+                </div>
+
+                {/* Tipo */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+                  <select
+                    value={exportFilters.type ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, type: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50"
+                  >
+                    <option value="">Todos</option>
+                    <option value="P">Petición</option>
+                    <option value="Q">Queja</option>
+                    <option value="R">Reclamo</option>
+                    <option value="S">Sugerencia</option>
+                    <option value="F">Felicitación</option>
+                  </select>
+                </div>
+
+                {/* Prioridad */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Prioridad</label>
+                  <select
+                    value={exportFilters.priority ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, priority: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50"
+                  >
+                    <option value="">Todas</option>
+                    <option value="LOW">Baja</option>
+                    <option value="MED">Media</option>
+                    <option value="HIGH">Alta</option>
+                  </select>
+                </div>
+
+                {/* Desde */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    value={exportFilters.date_from ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, date_from: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50"
+                  />
+                </div>
+
+                {/* Hasta */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    value={exportFilters.date_to ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, date_to: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleExport("csv")}
+                  disabled={exporting !== null}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                >
+                  {exporting === "csv" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                  Descargar CSV
+                </button>
+
+                <button
+                  onClick={() => handleExport("excel")}
+                  disabled={exporting !== null}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                >
+                  {exporting === "excel" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+                  Descargar Excel
+                </button>
+
+                <button
+                  onClick={() => setExportFilters({})}
+                  className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> Limpiar filtros
+                </button>
+              </div>
+            </div>
+          )}
 
         </div>
 
@@ -488,7 +896,703 @@ export function AdminDashboard() {
           })}
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
+        {/* ── Analytics view ─────────────────────────────────────────────── */}
+        {viewMode === "analytics" && (
+          <div className="mb-8 space-y-6">
+
+            {/* ── Filtro de período ── */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Período:</span>
+              {[
+                { label: "7 días",  days: 7  },
+                { label: "30 días", days: 30 },
+                { label: "90 días", days: 90 },
+                { label: "Todo",    days: 0  },
+              ].map(opt => (
+                <button
+                  key={opt.days}
+                  onClick={() => setPeriodDays(opt.days)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    periodDays === opt.days
+                      ? "bg-blue-600 text-white"
+                      : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <button
+                onClick={() => { if (!dashLoading) loadDashboard(); }}
+                disabled={dashLoading}
+                className="ml-auto flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${dashLoading ? "animate-spin" : ""}`} /> Actualizar
+              </button>
+            </div>
+
+            {/* ── KPI cards ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Total en período",  value: analyticsData.total,          icon: FileText,    color: "text-blue-600",  bg: "bg-blue-50"  },
+                { label: "Resueltas / Cerradas", value: analyticsData.resueltas,   icon: CheckCircle2,color: "text-green-600", bg: "bg-green-50" },
+                { label: "En Proceso",        value: analyticsData.enProceso,      icon: Clock,       color: "text-yellow-600",bg: "bg-yellow-50"},
+                { label: "Tasa de Resolución",value: `${analyticsData.tasaResolucion}%`, icon: Target,color: "text-purple-600",bg: "bg-purple-50"},
+              ].map(({ label, value, icon: Icon, color, bg }) => (
+                <div key={label} className="bg-white rounded-xl border shadow-sm p-4 flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon className={`w-5 h-5 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{value}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Fila 1: Estado + Tipo ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+              {/* Dona: por estado — interactiva */}
+              <div className="bg-white rounded-xl border shadow-sm p-5">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-gray-700">Distribución por Estado</p>
+                  <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">
+                    {analyticsData.total} PQRS
+                  </span>
+                </div>
+
+                {analyticsData.porEstado.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                ) : (() => {
+                  const totalEstado = analyticsData.porEstado.reduce((s, d) => s + d.value, 0);
+                  const active = activeEstadoIndex !== undefined ? analyticsData.porEstado[activeEstadoIndex] : null;
+
+                  // Custom active sector: expands + glows
+                  const renderActiveShape = (props: any) => {
+                    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+                    return (
+                      <g>
+                        <Sector
+                          cx={cx} cy={cy}
+                          innerRadius={innerRadius - 4}
+                          outerRadius={outerRadius + 10}
+                          startAngle={startAngle}
+                          endAngle={endAngle}
+                          fill={fill}
+                          opacity={1}
+                          style={{ filter: `drop-shadow(0 0 6px ${fill}99)` }}
+                        />
+                        <Sector
+                          cx={cx} cy={cy}
+                          innerRadius={outerRadius + 14}
+                          outerRadius={outerRadius + 17}
+                          startAngle={startAngle}
+                          endAngle={endAngle}
+                          fill={fill}
+                          opacity={0.5}
+                        />
+                      </g>
+                    );
+                  };
+
+                  return (
+                    <div className="flex flex-col gap-4">
+                      {/* Chart + centre text */}
+                      <div className="relative">
+                        <ResponsiveContainer width="100%" height={210}>
+                          <PieChart>
+                            <Pie
+                              data={analyticsData.porEstado}
+                              cx="50%" cy="50%"
+                              innerRadius={60} outerRadius={88}
+                              paddingAngle={3}
+                              dataKey="value"
+                              activeIndex={activeEstadoIndex}
+                              activeShape={renderActiveShape}
+                              onMouseEnter={(_, index) => setActiveEstadoIndex(index)}
+                              onMouseLeave={() => setActiveEstadoIndex(undefined)}
+                              animationBegin={0}
+                              animationDuration={700}
+                            >
+                              {analyticsData.porEstado.map((_, i) => (
+                                <Cell
+                                  key={i}
+                                  fill={COLORS_ESTADO[i % COLORS_ESTADO.length]}
+                                  opacity={activeEstadoIndex === undefined || activeEstadoIndex === i ? 1 : 0.4}
+                                  style={{ cursor: "pointer", transition: "opacity .2s" }}
+                                />
+                              ))}
+                            </Pie>
+                            <RTooltip
+                              content={({ active: a, payload }) => {
+                                if (!a || !payload?.length) return null;
+                                const d = payload[0];
+                                const pct = totalEstado > 0 ? ((d.value as number) / totalEstado * 100).toFixed(1) : "0";
+                                return (
+                                  <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color as string }} />
+                                      <span className="font-semibold text-gray-800">{d.name}</span>
+                                    </div>
+                                    <div className="flex gap-3 pl-4 text-gray-600">
+                                      <span><span className="font-bold text-gray-900">{d.value}</span> PQRS</span>
+                                      <span className="text-gray-400">·</span>
+                                      <span className="font-bold" style={{ color: d.color as string }}>{pct}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+
+                        {/* Centro: texto dinámico según hover */}
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                          style={{ paddingBottom: 0 }}
+                        >
+                          {active ? (
+                            <>
+                              <span
+                                className="text-2xl font-extrabold leading-none"
+                                style={{ color: COLORS_ESTADO[activeEstadoIndex! % COLORS_ESTADO.length] }}
+                              >
+                                {active.value}
+                              </span>
+                              <span className="text-xs text-gray-500 mt-0.5 font-medium">{active.name}</span>
+                              <span className="text-[11px] text-gray-400">
+                                {totalEstado > 0 ? ((active.value / totalEstado) * 100).toFixed(1) : 0}%
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-2xl font-extrabold text-gray-800 leading-none">{totalEstado}</span>
+                              <span className="text-xs text-gray-400 mt-0.5">Total PQRS</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Leyenda personalizada con barras de proporción */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-1">
+                        {analyticsData.porEstado.map((d, i) => {
+                          const color = COLORS_ESTADO[i % COLORS_ESTADO.length];
+                          const pct = totalEstado > 0 ? (d.value / totalEstado) * 100 : 0;
+                          const isHovered = activeEstadoIndex === i;
+                          return (
+                            <button
+                              key={d.key ?? d.name}
+                              onMouseEnter={() => setActiveEstadoIndex(i)}
+                              onMouseLeave={() => setActiveEstadoIndex(undefined)}
+                              className={`text-left rounded-lg px-2 py-1.5 transition-all ${
+                                isHovered ? "bg-gray-50 scale-[1.02]" : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                                  <span className={`text-xs font-medium ${ isHovered ? "text-gray-900" : "text-gray-600" }`}>
+                                    {d.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-bold" style={{ color }}>{d.value}</span>
+                              </div>
+                              <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${pct}%`, background: color }}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Barras: por tipo */}
+              <div className="bg-white rounded-xl border shadow-sm p-4">
+                <p className="text-sm font-semibold text-gray-700 mb-4">Solicitudes por Tipo</p>
+                {analyticsData.porTipo.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={analyticsData.porTipo} barSize={32} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <RTooltip content={<CustomTooltip />} />
+                      <Bar dataKey="value" name="Cantidad" radius={[4, 4, 0, 0]}>
+                        {analyticsData.porTipo.map((_, i) => (
+                          <Cell key={i} fill={COLORS_TIPO[i % COLORS_TIPO.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* ── Fila 2: Tendencia diaria ── */}
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-4">
+                Tendencia de Radicación
+                <span className="font-normal text-gray-400 ml-2">
+                  (últimos {periodDays > 0 ? periodDays : 90} días)
+                </span>
+              </p>
+              {analyticsData.tendencia.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">Sin datos en el período seleccionado</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={analyticsData.tendencia} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}    />
+                      </linearGradient>
+                      <linearGradient id="gradRes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0}    />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 10 }}
+                      tickFormatter={v => v.slice(5)} // MM-DD
+                    />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <RTooltip content={<CustomTooltip />} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="total"     name="Radicadas" stroke="#3b82f6" strokeWidth={2} fill="url(#gradTotal)" dot={false} />
+                    <Area type="monotone" dataKey="resueltas" name="Resueltas"  stroke="#22c55e" strokeWidth={2} fill="url(#gradRes)"   dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* ── Fila 3: Prioridad + Áreas ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+              {/* Dona: por prioridad */}
+              <div className="bg-white rounded-xl border shadow-sm p-4">
+                <p className="text-sm font-semibold text-gray-700 mb-4">Distribución por Prioridad</p>
+                {analyticsData.porPrioridad.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={analyticsData.porPrioridad}
+                        cx="50%" cy="50%"
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
+                      >
+                        {analyticsData.porPrioridad.map((_, i) => (
+                          <Cell key={i} fill={COLORS_PRIORIDAD[i % COLORS_PRIORIDAD.length]} />
+                        ))}
+                      </Pie>
+                      <RTooltip content={<CustomTooltip />} />
+                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Barras horizontales: por área */}
+              <div className="bg-white rounded-xl border shadow-sm p-4">
+                <p className="text-sm font-semibold text-gray-700 mb-4">PQRS por Área</p>
+                {analyticsData.porArea.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart
+                      data={analyticsData.porArea.slice(0, 8)}
+                      layout="vertical"
+                      barSize={18}
+                      margin={{ top: 4, right: 24, left: 4, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={90} />
+                      <RTooltip content={<CustomTooltip />} />
+                      <Bar dataKey="value" name="PQRS" radius={[0, 4, 4, 0]}>
+                        {analyticsData.porArea.map((_, i) => (
+                          <Cell key={i} fill={COLORS_AREA[i % COLORS_AREA.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* ── Fila 4 (nueva): Comparativa Temporal ──────────────────── */}
+            {(() => {
+              const { monthly, years, months, yearSeries, daySeries } = comparativaData;
+
+              // defaults dinámicos cuando no hay selección aún
+              const yA = compYearA  || years[years.length-1]  || "";
+              const yB = compYearB  || years[years.length-2]  || years[years.length-1] || "";
+              const mA = compMonthA || months[months.length-1] || "";
+              const mB = compMonthB || months[months.length-2] || months[months.length-1] || "";
+
+              const metricLabel: Record<string,string> = {
+                total: "Total radicadas", resueltas: "Resueltas", enProceso: "En Proceso",
+              };
+              const metricColor: Record<string,string> = {
+                total: "#3b82f6", resueltas: "#22c55e", enProceso: "#f59e0b",
+              };
+              const metricColorB = "#8b5cf6";
+
+              // datos según modo
+              let chartData: any[] = [];
+              let xKey = "";
+              let serieA = "";
+              let serieB = "";
+              let serieALabel = "";
+              let serieBLabel = "";
+              let showComparison = false;
+
+              if (compMode === "monthly") {
+                chartData = monthly;
+                xKey = "label";
+                showComparison = false;
+              } else if (compMode === "year-vs-year") {
+                // merge dos series por mes en un solo array
+                const sA = yearSeries(yA);
+                const sB = yearSeries(yB);
+                chartData = sA.map((row,i)=>({
+                  mes: row.mes,
+                  [`${yA}`]: row[compMetric as keyof typeof row],
+                  [`${yB}_b`]: sB[i]?.[compMetric as keyof typeof sB[0]] ?? 0,
+                }));
+                xKey = "mes";
+                serieA = yA;
+                serieB = `${yB}_b`;
+                serieALabel = yA;
+                serieBLabel = yB;
+                showComparison = true;
+              } else {
+                const sA = daySeries(mA);
+                const sB = daySeries(mB);
+                const maxDays = Math.max(sA.length, sB.length);
+                chartData = Array.from({length: maxDays}, (_, i) => ({
+                  dia: i+1,
+                  [`${mA}`]: sA[i]?.[compMetric as keyof typeof sA[0]] ?? 0,
+                  [`${mB}_b`]: sB[i]?.[compMetric as keyof typeof sB[0]] ?? 0,
+                }));
+                xKey = "dia";
+                serieA = mA;
+                serieB = `${mB}_b`;
+                serieALabel = mA;
+                serieBLabel = mB;
+                showComparison = true;
+              }
+
+              const compTooltip = ({ active, payload, label }: any) => {
+                if (!active || !payload?.length) return null;
+                return (
+                  <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2 text-xs">
+                    <p className="font-semibold text-gray-700 mb-1.5">{label ?? payload[0]?.payload?.[xKey]}</p>
+                    {payload.map((s: any, i: number) => (
+                      <div key={i} className="flex items-center gap-1.5 mb-0.5">
+                        <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                        <span className="text-gray-600">{s.name}:</span>
+                        <span className="font-bold text-gray-900">{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              };
+
+              // Selector de mes: available months as "YYYY-MM"
+              const MonthSelect = ({ value, onChange, label }: { value:string; onChange:(v:string)=>void; label:string }) => (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</span>
+                  <select
+                    value={value}
+                    onChange={e=>onChange(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 min-w-[110px]"
+                  >
+                    {months.map(m=>(
+                      <option key={m} value={m}>
+                        {comparativaData.MN[parseInt(m.slice(5))-1]} {m.slice(0,4)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+
+              const YearSelect = ({ value, onChange, label }: { value:string; onChange:(v:string)=>void; label:string }) => (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</span>
+                  <select
+                    value={value}
+                    onChange={e=>onChange(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 min-w-[80px]"
+                  >
+                    {years.map(y=>(
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+
+              return (
+                <div className="bg-white rounded-xl border shadow-sm p-5">
+                  {/* cabecera */}
+                  <div className="flex flex-wrap items-start gap-3 mb-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">Comparativa Temporal</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Analiza la evolución y compara períodos</p>
+                    </div>
+
+                    {/* modo */}
+                    <div className="flex items-center bg-gray-100 rounded-lg p-0.5 text-xs font-medium gap-0.5">
+                      {([
+                        { key:"monthly",       label:"Mensual" },
+                        { key:"year-vs-year",  label:"Año vs Año" },
+                        { key:"month-vs-month",label:"Mes vs Mes" },
+                      ] as const).map(opt=>(
+                        <button
+                          key={opt.key}
+                          onClick={()=>setCompMode(opt.key)}
+                          className={`px-3 py-1.5 rounded-md transition-all ${
+                            compMode===opt.key
+                              ? "bg-white shadow text-blue-700 font-semibold"
+                              : "text-gray-500 hover:text-gray-700"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* métrica */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {(["total","resueltas","enProceso"] as const).map(m=>(
+                        <button
+                          key={m}
+                          onClick={()=>setCompMetric(m)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                            compMetric===m
+                              ? "border-transparent text-white shadow-sm"
+                              : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                          style={compMetric===m ? { background: metricColor[m] } : {}}
+                        >
+                          {metricLabel[m]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* selectores de período */}
+                  {showComparison && (
+                    <div className="flex flex-wrap items-end gap-4 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: metricColor[compMetric] }} />
+                        <span className="text-xs text-gray-500 font-medium">Periodo A</span>
+                      </div>
+                      {compMode==="year-vs-year"
+                        ? <YearSelect  value={yA} onChange={setCompYearA}  label="Año A"  />
+                        : <MonthSelect value={mA} onChange={setCompMonthA} label="Mes A" />}
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: metricColorB }} />
+                        <span className="text-xs text-gray-500 font-medium">Periodo B</span>
+                      </div>
+                      {compMode==="year-vs-year"
+                        ? <YearSelect  value={yB} onChange={setCompYearB}  label="Año B"  />
+                        : <MonthSelect value={mB} onChange={setCompMonthB} label="Mes B" />}
+
+                      {/* resumen delta */}
+                      {(() => {
+                        const totA = chartData.reduce((s:number,r:any)=>s+(r[serieA]??0),0);
+                        const totB = chartData.reduce((s:number,r:any)=>s+(r[serieB]??0),0);
+                        const delta = totA - totB;
+                        const pct   = totB>0 ? Math.abs(Math.round((delta/totB)*100)) : null;
+                        return (
+                          <div className="ml-auto flex items-center gap-2 text-xs">
+                            <span className="text-gray-400">{serieALabel} — {serieBLabel}:</span>
+                            <span className={`font-bold ${ delta>0?"text-blue-600":delta<0?"text-red-500":"text-gray-500" }`}>
+                              {delta>0?"+":""}{delta}
+                            </span>
+                            {pct!==null && (
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                delta>0?"bg-blue-50 text-blue-700":delta<0?"bg-red-50 text-red-600":"bg-gray-100 text-gray-500"
+                              }`}>
+                                {delta>0?"+":delta<0?"-":""}{pct}%
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* gráfica */}
+                  {chartData.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-10">Sin datos disponibles para este período</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={260}>
+                      {compMode==="monthly" ? (
+                        <BarChart data={chartData} barSize={18} margin={{ top:4, right:8, left:-16, bottom:0 }}>
+                          <defs>
+                            <linearGradient id="cgTotal" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%"  stopColor="#3b82f6" stopOpacity={1}   />
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.7} />
+                            </linearGradient>
+                            <linearGradient id="cgRes" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%"  stopColor="#22c55e" stopOpacity={1}   />
+                              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.7} />
+                            </linearGradient>
+                            <linearGradient id="cgPro" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%"  stopColor="#f59e0b" stopOpacity={1}   />
+                              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.7} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="label" tick={{ fontSize:10 }} />
+                          <YAxis tick={{ fontSize:10 }} allowDecimals={false} />
+                          <RTooltip content={compTooltip} />
+                          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize:11 }} />
+                          {compMetric==="total"     && <Bar dataKey="total"     name="Total"       fill="url(#cgTotal)" radius={[3,3,0,0]} />}
+                          {compMetric==="resueltas" && <Bar dataKey="resueltas" name="Resueltas"    fill="url(#cgRes)"   radius={[3,3,0,0]} />}
+                          {compMetric==="enProceso" && <Bar dataKey="enProceso" name="En Proceso"   fill="url(#cgPro)"   radius={[3,3,0,0]} />}
+                        </BarChart>
+                      ) : (
+                        <LineChart data={chartData} margin={{ top:4, right:16, left:-16, bottom:0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis
+                            dataKey={xKey}
+                            tick={{ fontSize:10 }}
+                            tickLine={false}
+                          />
+                          <YAxis tick={{ fontSize:10 }} allowDecimals={false} />
+                          <RTooltip content={compTooltip} />
+                          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize:11 }} />
+                          <Line
+                            type="monotone"
+                            dataKey={serieA}
+                            name={`${metricLabel[compMetric]} ${serieALabel}`}
+                            stroke={metricColor[compMetric]}
+                            strokeWidth={2.5}
+                            dot={{ r:3, fill: metricColor[compMetric] }}
+                            activeDot={{ r:5 }}
+                            animationDuration={600}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey={serieB}
+                            name={`${metricLabel[compMetric]} ${serieBLabel}`}
+                            stroke={metricColorB}
+                            strokeWidth={2.5}
+                            strokeDasharray="5 3"
+                            dot={{ r:3, fill: metricColorB }}
+                            activeDot={{ r:5 }}
+                            animationDuration={600}
+                          />
+                        </LineChart>
+                      )}
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Fila 5 (ant. 4): SLA + métricas del backend ──────────────── */}
+            {dashLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+                <span className="text-sm text-gray-500">Cargando métricas del servidor...</span>
+              </div>
+            )}
+            {dashData && (() => {
+              const sla = dashData.sla as Record<string, unknown> | undefined;
+              if (!sla) return null;
+              const slaScalars = Object.entries(sla).filter(([, v]) => typeof v === "number" || typeof v === "string");
+              if (!slaScalars.length) return null;
+
+              const SLA_LABELS: Record<string, string> = {
+                vencidas:              "Vencidas",
+                por_vencer_hoy:        "Por Vencer Hoy",
+                por_vencer_7_dias:     "Por Vencer (7 días)",
+                sin_sla_asignado:      "Sin SLA Asignado",
+                cumplimiento_porcentaje: "Cumplimiento %",
+              };
+
+              return (
+                <div className="bg-white rounded-xl border shadow-sm p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <ShieldAlert className="w-4 h-4 text-orange-500" />
+                    <p className="text-sm font-semibold text-gray-700">SLA — Niveles de Servicio</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {slaScalars.map(([k, v]) => {
+                      const isBad = (k === "vencidas" || k === "por_vencer_hoy") && Number(v) > 0;
+                      return (
+                        <div key={k} className={`rounded-xl border p-4 ${isBad ? "border-red-200 bg-red-50" : "border-gray-100 bg-gray-50"}`}>
+                          <p className={`text-2xl font-bold ${isBad ? "text-red-600" : "text-gray-900"}`}>{String(v)}{k.includes("porcentaje") ? "%" : ""}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{SLA_LABELS[k] ?? k.replace(/_/g," ")}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Resumen anónimas vs autenticadas (del backend) ── */}
+            {dashData?.resumen && (() => {
+              const res = dashData.resumen as Record<string, unknown>;
+              const anonimas      = res["anonimas"]   as number | undefined;
+              const autenticadas  = res["autenticadas"] as number | undefined;
+              const pctAnonimas   = res["pct_anonimas"] as number | undefined;
+              if (anonimas === undefined && autenticadas === undefined) return null;
+              const pieData = [
+                { name: "Anónimas",      value: anonimas    ?? 0 },
+                { name: "Autenticadas",  value: autenticadas ?? 0 },
+              ].filter(d => d.value > 0);
+              return (
+                <div className="bg-white rounded-xl border shadow-sm p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <User className="w-4 h-4 text-blue-500" />
+                    <p className="text-sm font-semibold text-gray-700">Perfil de Solicitantes</p>
+                    {pctAnonimas !== undefined && (
+                      <span className="ml-auto text-xs text-gray-400">{pctAnonimas}% anónimas</span>
+                    )}
+                  </div>
+                  {pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={180}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" outerRadius={65} dataKey="value"
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          labelLine={false}
+                        >
+                          <Cell fill="#3b82f6" />
+                          <Cell fill="#a855f7" />
+                        </Pie>
+                        <RTooltip content={<CustomTooltip />} />
+                        <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                  )}
+                </div>
+              );
+            })()}
+
+          </div>
+        )}
+
+        <div className={`flex flex-col lg:flex-row gap-6${viewMode === "analytics" ? " hidden" : ""}`}>
           {/* List panel */}
           <div className={`flex-1 ${selected ? "hidden lg:block" : "block"}`}>
             <Card className="border-0 shadow-sm">
@@ -666,8 +1770,8 @@ export function AdminDashboard() {
                     <p className="text-sm text-gray-600 whitespace-pre-wrap">{selected.description}</p>
                   </div>
 
-                  {/* Tabs – 4 sections */}
-                  <div className="grid grid-cols-4 border rounded-lg overflow-hidden text-xs">
+                  {/* Tabs – 5 sections */}
+                  <div className="grid grid-cols-5 border rounded-lg overflow-hidden text-xs">
                     {TABS.map(t => (
                       <button
                         key={t.id}
@@ -950,6 +2054,69 @@ export function AdminDashboard() {
                           </Button>
                         </>
                       )}
+                    </div>
+                  )}
+                  {/* ── Tab: Adjuntos ── */}
+                  {activeTab === "adjuntos" && (
+                    <div className="space-y-3">
+                      {/* Upload button */}
+                      <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-lg py-4 cursor-pointer transition-colors ${
+                        uploading ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed" : "border-blue-300 hover:border-blue-500 hover:bg-blue-50"
+                      }`}>
+                        {uploading
+                          ? <><Loader2 className="w-4 h-4 animate-spin text-blue-400" /><span className="text-sm text-gray-500">Subiendo...</span></>
+                          : <><Upload className="w-4 h-4 text-blue-500" /><span className="text-sm text-blue-600 font-medium">Adjuntar archivo</span><span className="text-xs text-gray-400">(máx. 10&nbsp;MB)</span></>}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          disabled={uploading}
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file && selected) handleUploadFile(selected.id, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+
+                      {/* List */}
+                      {attachLoading ? (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+                          <span className="text-sm text-gray-500">Cargando adjuntos...</span>
+                        </div>
+                      ) : attachments.length === 0 ? (
+                        <div className="text-center py-8 text-gray-400">
+                          <Paperclip className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-xs">Sin archivos adjuntos</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {attachments.map(att => (
+                            <div key={att.id} className="flex items-center justify-between border rounded-lg px-3 py-2 bg-white text-sm">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                <span className="truncate text-gray-700 text-xs">{att.filename}</span>
+                              </div>
+                              <a
+                                href={att.file}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-2 shrink-0 text-blue-600 hover:text-blue-800"
+                                title="Descargar"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <button
+                        className="text-xs text-gray-400 hover:text-blue-600 flex items-center gap-1 mx-auto"
+                        onClick={() => selected && loadAttachments(selected.id)}
+                      >
+                        <RefreshCw className="w-3 h-3" /> Actualizar
+                      </button>
                     </div>
                   )}
                 </CardContent>

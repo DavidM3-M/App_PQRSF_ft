@@ -22,18 +22,22 @@ export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
  * - `clear()`      → elimina tokens y datos de sesión; se llama en logout o 401 irrecuperable.
  */
 export const tokens = {
-  /** Devuelve el access token actual o null si no existe. */
-  getAccess: () => localStorage.getItem("access_token"),
+  /**
+   * Devuelve el access token actual o null si no existe.
+   * Se almacena en sessionStorage para reducir exposición XSS
+   * (no persiste entre pestañas ni al cerrar el navegador).
+   */
+  getAccess: () => sessionStorage.getItem("access_token"),
   /** Devuelve el refresh token actual o null si no existe. */
   getRefresh: () => localStorage.getItem("refresh_token"),
-  /** Guarda access y refresh tokens en localStorage. */
+  /** Guarda el access token en sessionStorage y el refresh token en localStorage. */
   set: (access: string, refresh: string) => {
-    localStorage.setItem("access_token", access);
+    sessionStorage.setItem("access_token", access);
     localStorage.setItem("refresh_token", refresh);
   },
-  /** Elimina tokens y el objeto usuario de localStorage (cierre de sesión). */
+  /** Elimina tokens y datos de sesión del almacenamiento (cierre de sesión). */
   clear: () => {
-    localStorage.removeItem("access_token");
+    sessionStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("usuario");
   },
@@ -89,9 +93,9 @@ async function apiFetch<T>(
       }
       return retry.json() as Promise<T>;
     }
-    // Refresco fallido → limpiar sesión y redirigir al login
+    // Refresco fallido → limpiar sesión y notificar a AuthContext mediante evento
     tokens.clear();
-    window.location.href = "/login";
+    window.dispatchEvent(new CustomEvent("auth:session-expired"));
     throw new ApiError(401, { detail: "Su sesión ha expirado. Por favor inicie sesión de nuevo." });
   }
 
@@ -1346,4 +1350,132 @@ export async function apiGetAttachments(pqrsId: string) {
   return apiFetch<PaginatedResponse<Attachment>>(
     `/api/pqrs/${pqrsId}/attachments/`,
   );
+}
+
+// ────────────────────────────────────────────
+//  PQRS – EXPORTACIÓN DE REPORTES
+// ────────────────────────────────────────────
+
+/** Filtros opcionales compartidos por los endpoints de exportación. */
+export interface ExportFilters {
+  /** Código de estado: RAD | PRO | RES | CER */
+  status?: string;
+  /** Código de tipo: P | Q | R | S | F */
+  type?: string;
+  /** Prioridad: LOW | MED | HIGH */
+  priority?: string;
+  /** Fecha de inicio (YYYY-MM-DD) */
+  date_from?: string;
+  /** Fecha de fin (YYYY-MM-DD) */
+  date_to?: string;
+  /** UUID de dependencia — solo para reportes por área y solo visible a admins. */
+  dependency_id?: string;
+}
+
+/** Lee el nombre de archivo de la cabecera Content-Disposition. */
+function extractFilename(res: Response, fallback: string): string {
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const match = cd.match(/filename[^;=\n]*=([^;\n]*)/);
+  if (match) return match[1].trim().replace(/^["']|["']$/g, "");
+  return fallback;
+}
+
+/** Construye el query string a partir de los filtros de exportación. */
+function buildExportParams(filters?: ExportFilters): string {
+  if (!filters) return "";
+  const p = new URLSearchParams();
+  if (filters.status)        p.set("status",        filters.status);
+  if (filters.type)          p.set("type",          filters.type);
+  if (filters.priority)      p.set("priority",      filters.priority);
+  if (filters.date_from)     p.set("date_from",     filters.date_from);
+  if (filters.date_to)       p.set("date_to",       filters.date_to);
+  if (filters.dependency_id) p.set("dependency_id", filters.dependency_id);
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
+/**
+ * Fetch especializado para respuestas binarias (blob).
+ * Reutiliza el mecanismo de refresco de token de `apiFetch`.
+ */
+async function apiFetchBlob(
+  path: string,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const makeHeaders = (): Record<string, string> => {
+    const token = tokens.getAccess();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  let res = await fetch(`${API_BASE}${path}`, { headers: makeHeaders() });
+
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      res = await fetch(`${API_BASE}${path}`, { headers: makeHeaders() });
+    } else {
+      tokens.clear();
+      window.dispatchEvent(new CustomEvent("auth:session-expired"));
+      throw new ApiError(401, { detail: "Su sesión ha expirado. Por favor inicie sesión de nuevo." });
+    }
+  }
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, errData);
+  }
+
+  const blob = await res.blob();
+  const filename = extractFilename(res, fallbackFilename);
+  return { blob, filename };
+}
+
+/**
+ * Exporta todas las PQRS (filtradas opcionalmente) en formato CSV.
+ * Requiere rol ADMIN.
+ *
+ * @param filters - Filtros opcionales de estado, tipo, prioridad y fechas.
+ * @returns `{ blob, filename }` — usa `URL.createObjectURL` para forzar la descarga.
+ */
+export async function apiExportCSV(filters?: ExportFilters) {
+  const qs = buildExportParams(filters);
+  return apiFetchBlob(`/api/pqrs/exportar_csv/${qs}`, "pqrs_export.csv");
+}
+
+/**
+ * Exporta todas las PQRS (filtradas opcionalmente) en formato Excel (.xlsx).
+ * Requiere rol ADMIN.
+ *
+ * @param filters - Filtros opcionales de estado, tipo, prioridad y fechas.
+ * @returns `{ blob, filename }` — usa `URL.createObjectURL` para forzar la descarga.
+ */
+export async function apiExportExcel(filters?: ExportFilters) {
+  const qs = buildExportParams(filters);
+  return apiFetchBlob(`/api/pqrs/exportar_excel/${qs}`, "pqrs_export.xlsx");
+}
+
+/**
+ * Exporta las PQRS del área propia (filtradas opcionalmente) en formato CSV.
+ * Accesible para encargados de dependencia activos (DependencyManager) y admins.
+ * Los admins pueden filtrar adicionalmente por `dependency_id`.
+ *
+ * @param filters - Filtros opcionales de estado, tipo, prioridad, fechas y dependency_id.
+ * @returns `{ blob, filename }` — usa `URL.createObjectURL` para forzar la descarga.
+ */
+export async function apiExportCSVArea(filters?: ExportFilters) {
+  const qs = buildExportParams(filters);
+  return apiFetchBlob(`/api/pqrs/exportar_csv_area/${qs}`, "pqrs_area_export.csv");
+}
+
+/**
+ * Exporta las PQRS del área propia (filtradas opcionalmente) en formato Excel (.xlsx).
+ * Accesible para encargados de dependencia activos (DependencyManager) y admins.
+ * Los admins pueden filtrar adicionalmente por `dependency_id`.
+ *
+ * @param filters - Filtros opcionales de estado, tipo, prioridad, fechas y dependency_id.
+ * @returns `{ blob, filename }` — usa `URL.createObjectURL` para forzar la descarga.
+ */
+export async function apiExportExcelArea(filters?: ExportFilters) {
+  const qs = buildExportParams(filters);
+  return apiFetchBlob(`/api/pqrs/exportar_excel_area/${qs}`, "pqrs_area_export.xlsx");
 }

@@ -56,6 +56,15 @@ export default defineConfig({
     // ocupado (en lugar de saltar a 5174/5175 silenciosamente y romper CORS).
     port: 5173,
     strictPort: true,
+    // Cabeceras de seguridad HTTP en el servidor de desarrollo.
+    // Deben replicarse también en la configuración del servidor web de producción
+    // (Nginx/Apache) ya que Vite no sirve en producción.
+    headers: {
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    },
   },
 
   // Tipos de archivo soportados como importaciones raw (sin procesamiento CSS/TS)

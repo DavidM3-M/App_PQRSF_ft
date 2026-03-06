@@ -122,6 +122,7 @@ Las rutas protegidas usan el componente `ProtectedRoute` en [src/app/routes.tsx]
 | `/admin/areas` | `GestionAreas` | Rol `admin` |
 | `/admin/roles` | `GestionRoles` | Rol `admin` |
 | `/admin/sla` | `GestionSLA` | Rol `admin` |
+| `/perfil` | `Perfil` | Autenticado |
 | `*` | `NotFound` | Público |
 
 ---
@@ -132,17 +133,21 @@ Las rutas protegidas usan el componente `ProtectedRoute` en [src/app/routes.tsx]
 
 Gestiona el ciclo de vida de la sesión:
 
-- Almacena `access_token` y `refresh_token` en `localStorage`.
-- Al iniciar, verifica el token y carga el perfil desde el backend.
-- Expone `usuario`, `isAuthenticated`, `loading`, `login()` y `logout()`.
-- El modelo `Usuario` normaliza la respuesta del backend e incluye el rol derivado.
+- `access_token` se almacena en `sessionStorage` (no persiste entre pestañas ni al cerrar el navegador, reduciendo exposición XSS). `refresh_token` permanece en `localStorage`.
+- Al iniciar, verifica el token y carga el perfil desde el backend. El backend siempre es **fuente de verdad** para roles y permisos; los valores de `localStorage` no elevan privilegios.
+- Escucha el evento `auth:session-expired` (emitido por `apiFetch` al recibir un 401 irrecuperable) para limpiar sesión y redirigir al login de forma segura (sin `window.location.href`).
+- `login()` y `loginWithGoogle()` retornan `{ ok, rol?, error? }` para que el componente de login pueda navegar al destino correcto sin leer `localStorage`.
+- Expone `usuario`, `isAuthenticated`, `loading`, `login()`, `loginWithGoogle()`, `logout()` y `refreshPerfil()`.
 
 ### `api.ts` — [src/app/lib/api.ts](src/app/lib/api.ts)
 
 Capa HTTP centralizada:
 
-- `apiFetch<T>()`: wrapper con adjunto de JWT, refresco automático en 401 y manejo de errores tipados (`ApiError`).
-- Todos los endpoints del backend están exportados como funciones nombradas: `apiLogin`, `apiCreatePQRS`, `apiListPQRS`, `apiAssignPQRS`, `apiRespondPQRS`, `apiEscalatePQRS`, `apiConsultarRadicado`, etc.
+- **`tokens`**: helpers que almacenan el `access_token` en `sessionStorage` y el `refresh_token` en `localStorage`. `tokens.clear()` limpia ambos almacenamientos al cerrar sesión.
+- `apiFetch<T>()`: wrapper con adjunto de JWT Bearer, refresco automático en 401, y ante fallo del refresco emite el evento `auth:session-expired` (en lugar de redirigir con `window.location.href`) para que `AuthContext` realice la navegación de forma segura dentro del router.
+- `apiFetchBlob()`: variante especializada para respuestas binarias (`Blob`) con el mismo mecanismo de refresco, usada en la exportación de reportes.
+- Endpoints de exportación: `apiExportCSV`, `apiExportExcel` (admin, todos las PQRSF) y `apiExportCSVArea`, `apiExportExcelArea` (área, PQRSF de la dependencia propia). Todos aceptan `ExportFilters` opcionales (estado, tipo, prioridad, fechas).
+- Todos los endpoints del backend exportados como funciones nombradas: `apiLogin`, `apiCreatePQRS`, `apiListPQRS`, `apiAssignPQRS`, `apiRespondPQRS`, `apiEscalatePQRS`, `apiConsultarRadicado`, `apiGetDashboard`, `apiGetAttachments`, `apiUploadAttachment`, etc.
 - `formatApiError()`: traduce errores de la API a mensajes legibles para el usuario.
 
 ### `AdminDashboard` — [src/app/pages/AdminDashboard.tsx](src/app/pages/AdminDashboard.tsx)
@@ -150,9 +155,11 @@ Capa HTTP centralizada:
 Panel completo para administradores con:
 
 - Listado y filtrado de todas las PQRSF.
-- Detalle con pestañas: **Responder**, **Asignar**, **Escalar**, **Historial**.
+- Detalle con pestañas: **Responder**, **Asignar**, **Escalar**, **Historial**, **Adjuntos** (subir/descargar archivos adjuntos de la PQRS).
 - Acciones: asignar dependencia/responsable, responder (CITIZEN / FINAL / INTERNAL), escalar a otra área, cambiar estado.
 - Estadísticas de conteo por estado.
+- **Vista Analytics** (toggle «Ver Analytics»): KPI cards, dona interactiva por estado, barras por tipo, área chart de tendencia diaria, barras horizontales por área, dona de prioridad, panel de comparativa temporal (mensual / año-vs-año / mes-vs-mes) con delta automático. Filtrado por período (7/30/90 días o todo). Métricas de SLA y perfil de solicitantes cargadas desde `apiGetDashboard`.
+- **Panel de Exportación**: descarga de reportes CSV o Excel con filtros opcionales de estado, tipo, prioridad y rango de fechas mediante `apiExportCSV` / `apiExportExcel`.
 
 ### `Home` — [src/app/pages/Home.tsx](src/app/pages/Home.tsx)
 
@@ -166,9 +173,12 @@ Landing pública con modal de radicación inline:
 
 ### `AreaDashboard` — [src/app/pages/AreaDashboard.tsx](src/app/pages/AreaDashboard.tsx)
 
-> _Documentado el 2026-03-04._
+> _Actualizado el 2026-03-06._
 
 Panel de gestión de PQRSF para funcionarios de dependencia/área. Permite visualizar, filtrar y responder las PQRSF asignadas a la dependencia del usuario autenticado.
+
+- **Vista Analytics** (toggle «Ver Gráficas»): KPI cards, dona interactiva por estado, barras por tipo, área chart de tendencia diaria, dona de prioridad. Filtrado por período (7/30/90 días).
+- **Panel de Exportación**: descarga de reportes CSV o Excel del área propia con filtros opcionales mediante `apiExportCSVArea` / `apiExportExcelArea`.
 
 #### Estrategia de carga de datos
 
@@ -211,6 +221,14 @@ Las PQRSF referenciadas en asignaciones pero ausentes de la consulta primaria se
 - **Escritorio (≥ 1024 px):** columna izquierda con la lista + columna derecha fija de 440 px para el detalle.
 - **Móvil (< 1024 px):** lista y panel de detalle se alternan; al abrir detalle se bloquea el scroll del `body`.
 
+### `Perfil` — [src/app/pages/Perfil.tsx](src/app/pages/Perfil.tsx)
+
+Página de gestión del perfil del usuario autenticado, accesible en `/perfil`. Vinculada desde el nombre de usuario en la Navbar.
+
+- **Pestaña «Datos personales»**: edición de nombre, apellido, nombre de usuario, teléfono, dirección y ciudad mediante `apiUpdatePerfil`.
+- **Pestaña «Cambiar contraseña»**: validación de contraseña actual y nueva (con confirmación) mediante `apiChangePassword`.
+- Recarga automática del perfil en `AuthContext` tras guardar.
+
 ---
 
 ## Variables de entorno
@@ -221,8 +239,8 @@ Crear un archivo `.env.local` en la raíz del proyecto:
 # URL base de la API Django (sin barra final)
 VITE_API_URL=http://localhost:8000
 
-# Deshabilitar reCAPTCHA en desarrollo local
-VITE_DISABLE_CAPTCHA=true
+# Deshabilitar reCAPTCHA en desarrollo local (false en producción)
+VITE_DISABLE_CAPTCHA=false
 
 # Site key de Google reCAPTCHA v2 (requerido en producción)
 VITE_RECAPTCHA_SITE_KEY=your_site_key_here
@@ -384,17 +402,20 @@ src/
 ```
 /                  → Home (pública)
 /login             → Login
-/registro          → Register
+/register          → Register
 /crear-pqrs        → CrearPQRS (pública o autenticada)
 /consulta          → ConsultaRadicado (pública)
 /dashboard         → UserDashboard       [requiere sesión]
 /admin             → AdminDashboard      [requiere rol admin]
-/gestion-areas     → GestionAreas        [requiere rol admin]
-/area-dashboard    → AreaDashboard       [requiere rol area]
+/admin/areas       → GestionAreas        [requiere rol admin]
+/admin/roles       → GestionRoles        [requiere rol admin]
+/admin/sla         → GestionSLA          [requiere rol admin]
+/area              → AreaDashboard       [requiere rol area]
+/perfil            → Perfil              [requiere sesión]
 *                  → NotFound
 ```
 
-El componente `ProtectedRoute` en `routes.tsx` valida la sesión leyendo `localStorage` y redirige según el rol del usuario.
+El componente `ProtectedRoute` en `routes.tsx` verifica la sesión y el rol, redirigiendo al login o al dashboard según corresponda.
 
 ---
 
@@ -455,6 +476,30 @@ Formulario completo de radicación para usuarios autenticados o anónimos:
 ---
 
 ## Cambios recientes
+
+### 2026-03-06 — Seguridad, Analytics, Exportación y página de Perfil
+
+#### Seguridad
+
+- **`index.html`**: cabeceras HTTP de seguridad vía meta tags (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy`).
+- **`vite.config.ts`**: esas mismas cabeceras replicadas en el servidor de desarrollo.
+- **`api.ts`**: `access_token` movido a `sessionStorage` para reducir la superficie de ataque XSS (no persiste entre pestañas ni sesiones de navegador).
+- **`AuthContext.tsx`**: el backend es la única fuente de verdad para roles; eliminada la fusión de privilegios desde `localStorage`. Se escucha el evento `auth:session-expired` para redirección SPA-segura.
+- **`Login.tsx`**: bloqueo temporal de 30 s tras 5 intentos fallidos consecutivos. Soporte de parámetro `?redirect=` para redirigir al destino original post-login.
+- **`mockData.ts`**: contraseñas ficticias eliminadas de los mocks; lecturas de `localStorage` envueltas en `try/catch` con limpieza automática ante datos corruptos.
+- **`.env.example`**: `VITE_DISABLE_CAPTCHA` cambiado a `false` con nota de advertencia para producción.
+
+#### Nuevas funcionalidades
+
+- **Vista Analytics en `AdminDashboard`**: toggle «Ver Analytics» activa un panel con KPI cards, dona de estados (interactiva con hover), barras por tipo, gráfica de área de tendencia diaria, barras horizontales por área, dona de prioridad, comparativa temporal (mensual / año-vs-año / mes-vs-mes) con cálculo de delta automático, y métricas SLA/solicitantes desde `apiGetDashboard`.
+- **Vista Analytics en `AreaDashboard`**: toggle «Ver Gráficas» con KPI cards y mismas gráficas (estado, tipo, prioridad, tendencia) filtradas por período.
+- **Exportación de reportes**: panel «Exportar» en `AdminDashboard` (CSV/Excel global) y `AreaDashboard` (CSV/Excel de área) con filtros por estado, tipo, prioridad y rango de fechas. Usa `apiExportCSV`, `apiExportExcel`, `apiExportCSVArea`, `apiExportExcelArea`.
+- **Pestaña Adjuntos** en `AdminDashboard`: visualización, subida y descarga de adjuntos por PQRS mediante `apiGetAttachments` y `apiUploadAttachment`.
+- **Página `/perfil`** (`Perfil.tsx`): edición de datos personales y cambio de contraseña para usuarios autenticados. Vinculada desde la Navbar.
+- **Verificación por email en `ConsultaRadicado`**: cuando el backend indica que la PQRS requiere correo, se muestra un formulario de verificación de identidad o la opción de iniciar sesión con redirección de vuelta.
+- **Animaciones CSS**: clases `animate-fade-slide-up` y `animate-slide-down-fade` en `theme.css` para transiciones de paneles.
+
+---
 
 ### 2026-03-06 — Corrección crítica: encargado de área no veía PQRSF
 
@@ -554,4 +599,5 @@ Cuando el backend **no está disponible** (error de red `TypeError`), la aplicac
 | Script | Descripción |
 |---|---|
 | `npm run dev` | Inicia el servidor de desarrollo (Vite HMR) |
-| `npm run build` | Compila para producción en `dist/` |
+| `npm run build` | Verifica tipos TypeScript y compila para producción en `dist/` |
+| `npm run typecheck` | Verificación de tipos TypeScript sin emitir archivos |

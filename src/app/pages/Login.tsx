@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link, useSearchParams } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -18,8 +18,12 @@ interface LoginForm {
 export function Login() {
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect") ?? null;
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
 
   const {
     register,
@@ -28,20 +32,40 @@ export function Login() {
   } = useForm<LoginForm>();
 
   const onSubmit = async (data: LoginForm) => {
+    // Bloqueo temporal por intentos fallidos
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      const secs = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      toast.error("Demasiados intentos fallidos", {
+        description: `Espere ${secs} segundo${secs !== 1 ? "s" : ""} antes de intentar de nuevo.`,
+      });
+      return;
+    }
     setIsLoading(true);
     const result = await login(data.email, data.password);
     setIsLoading(false);
 
     if (result.ok) {
+      setFailedAttempts(0);
+      setLockoutUntil(null);
       toast.success("¡Bienvenido!", { description: "Sesión iniciada correctamente" });
-      const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
-      if (usuario.rol === "admin") navigate("/admin");
-      else if (usuario.rol === "area") navigate("/area");
+      if (redirectTo) navigate(redirectTo);
+      else if (result.rol === "admin") navigate("/admin");
+      else if (result.rol === "area") navigate("/area");
       else navigate("/dashboard");
     } else {
-      toast.error("Error de autenticación", {
-        description: result.error ?? "Correo o contraseña incorrectos",
-      });
+      const attempts = failedAttempts + 1;
+      setFailedAttempts(attempts);
+      if (attempts >= 5) {
+        const until = Date.now() + 30_000;
+        setLockoutUntil(until);
+        toast.error("Cuenta bloqueada temporalmente", {
+          description: "Demasiados intentos fallidos. Intente de nuevo en 30 segundos.",
+        });
+      } else {
+        toast.error("Error de autenticación", {
+          description: result.error ?? "Correo o contraseña incorrectos",
+        });
+      }
     }
   };
 
@@ -60,9 +84,9 @@ export function Login() {
       } else {
         toast.success("¡Bienvenido!", { description: "Sesión iniciada con Google" });
       }
-      const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
-      if (usuario.rol === "admin") navigate("/admin");
-      else if (usuario.rol === "area") navigate("/area");
+      if (redirectTo) navigate(redirectTo);
+      else if (result.rol === "admin") navigate("/admin");
+      else if (result.rol === "area") navigate("/area");
       else navigate("/dashboard");
     } else {
       toast.error("Error con Google", {
@@ -137,7 +161,7 @@ export function Login() {
               )}
             </div>
 
-            <Button type="submit" className="w-full bg-[#ff9800] hover:bg-[#f57c00] text-white font-bold" disabled={isLoading}>
+            <Button type="submit" className="w-full bg-[#ff9800] hover:bg-[#f57c00] text-white font-bold" disabled={isLoading || (!!lockoutUntil && Date.now() < lockoutUntil)}>
               {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </Button>
           </form>

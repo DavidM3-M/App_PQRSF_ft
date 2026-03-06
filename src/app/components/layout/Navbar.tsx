@@ -49,10 +49,10 @@ export function Navbar() {
                   </Button>
                 </Link>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5">
+                  <Link to="/perfil" className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5 hover:bg-gray-50 transition-colors">
                     <User className="h-4 w-4 text-gray-600" />
                     <span className="text-sm">{usuario?.nombre}</span>
-                  </div>
+                  </Link>
                   <Button
                     variant="ghost"
                     size="sm"

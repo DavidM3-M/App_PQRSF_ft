@@ -6,7 +6,7 @@
  * @author Sistema PQRS Institucional
  * @date 2026-03-04
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
@@ -15,9 +15,16 @@ import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Building2, FileText, Clock, CheckCircle2, AlertCircle, X, User, Calendar, ArrowLeft, Loader2, LayoutDashboard, Search } from "lucide-react";
+import { Building2, FileText, Clock, CheckCircle2, AlertCircle, X, User, Calendar, ArrowLeft, Loader2, LayoutDashboard, Search, FileDown, FileSpreadsheet, ChevronDown, BarChart2, Target, RefreshCw } from "lucide-react";
+import {
+  ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip as RTooltip, Legend, Sector,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area,
+} from "recharts";
 import {
   apiListPQRS, apiRespondPQRS, apiUpdateEstado, apiListAllAssignments, apiGetPQRS,
+  apiExportCSVArea, apiExportExcelArea, ExportFilters,
   PqrsAPI, AssignmentAPI, PQRS_STATUS_LABEL, PQRS_TYPE_LABEL, PQRS_PRIORITY_LABEL,
   formatApiError
 } from "../lib/api";
@@ -73,6 +80,51 @@ export function AreaDashboard() {
 
   /** Valor del filtro de estado activo (`"todos"` muestra todas). */
   const [filtroEstado, setFiltroEstado] = useState("todos");
+
+  // ── Modo de vista: lista de PQRS o gráficas de analytics ─────────────────
+  const [viewMode, setViewMode]     = useState<"list" | "analytics">("list");
+  /** Días del período para filtrar las gráficas (0 = todo el histórico). */
+  const [periodDays, setPeriodDays] = useState(30);
+  /** Índice del sector activo en la dona de estado. */
+  const [activeEstadoIndex, setActiveEstadoIndex] = useState<number | undefined>(undefined);
+
+  // ── Exportación de reportes por área ─────────────────────────────────────
+  /** Controla la visibilidad del panel de exportación. */
+  const [showExport, setShowExport] = useState(false);
+  /** Formato que se está descargando actualmente, o null si no hay descarga en curso. */
+  const [exporting, setExporting] = useState<"csv" | "excel" | null>(null);
+  /** Filtros opcionales aplicados al exportar. */
+  const [exportFilters, setExportFilters] = useState<ExportFilters>({});
+
+  /** Fuerza la descarga de un Blob como archivo. */
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Dispara la exportación del reporte de área en CSV o Excel.
+   * Llama a los endpoints `/api/pqrs/exportar_csv_area/` o
+   * `/api/pqrs/exportar_excel_area/` con los filtros activos.
+   */
+  const handleExport = async (format: "csv" | "excel") => {
+    setExporting(format);
+    try {
+      const result = format === "csv"
+        ? await apiExportCSVArea(exportFilters)
+        : await apiExportExcelArea(exportFilters);
+      triggerDownload(result.blob, result.filename);
+      toast.success(`Reporte ${format.toUpperCase()} descargado correctamente`);
+    } catch (e) {
+      toast.error(`Error al exportar ${format.toUpperCase()}`, { description: formatApiError(e) });
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<RespondForm>({
     defaultValues: { response_type: "CITIZEN", new_status: "" },
@@ -265,6 +317,88 @@ export function AreaDashboard() {
   const pro   = pqrsList.filter(p => p.status === "PRO").length;             // En estado En Proceso.
   const res   = pqrsList.filter(p => p.status === "RES" || p.status === "CER").length; // Resueltas o Cerradas.
 
+  // ── Datos computados para las gráficas de analytics ──────────────────────
+  const analyticsData = useMemo(() => {
+    const cutoff = periodDays > 0
+      ? new Date(Date.now() - periodDays * 86_400_000)
+      : null;
+    const filtered = cutoff
+      ? pqrsList.filter(p => new Date(p.created_at) >= cutoff)
+      : pqrsList;
+
+    // Por estado
+    const estadoMap: Record<string, number> = {};
+    for (const p of filtered) estadoMap[p.status] = (estadoMap[p.status] ?? 0) + 1;
+    const porEstado = Object.entries(estadoMap).map(([key, value]) => ({
+      name: PQRS_STATUS_LABEL[key as keyof typeof PQRS_STATUS_LABEL] ?? key,
+      value, key,
+    }));
+
+    // Por tipo
+    const tipoMap: Record<string, number> = {};
+    for (const p of filtered) {
+      const t = p.type ?? p.pqrs_type ?? "?";
+      tipoMap[t] = (tipoMap[t] ?? 0) + 1;
+    }
+    const porTipo = Object.entries(tipoMap).map(([key, value]) => ({
+      name: PQRS_TYPE_LABEL[key as keyof typeof PQRS_TYPE_LABEL] ?? key,
+      value,
+    }));
+
+    // Por prioridad
+    const prioMap: Record<string, number> = {};
+    for (const p of filtered) {
+      const pr = p.priority ?? "?";
+      prioMap[pr] = (prioMap[pr] ?? 0) + 1;
+    }
+    const porPrioridad = Object.entries(prioMap).map(([key, value]) => ({
+      name: PQRS_PRIORITY_LABEL[key as keyof typeof PQRS_PRIORITY_LABEL] ?? key,
+      value,
+    }));
+
+    // Tendencia diaria
+    const days = periodDays > 0 ? periodDays : 90;
+    const cutoffTend = new Date(Date.now() - days * 86_400_000);
+    const tendenciaMap: Record<string, { fecha: string; total: number; resueltas: number }> = {};
+    for (const p of pqrsList) {
+      const d = new Date(p.created_at);
+      if (d < cutoffTend) continue;
+      const key = d.toISOString().slice(0, 10);
+      if (!tendenciaMap[key]) tendenciaMap[key] = { fecha: key, total: 0, resueltas: 0 };
+      tendenciaMap[key].total++;
+      if (p.status === "RES" || p.status === "CER") tendenciaMap[key].resueltas++;
+    }
+    const tendencia = Object.values(tendenciaMap).sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+    // KPIs
+    const totalKPI     = filtered.length;
+    const resueltas    = filtered.filter(p => p.status === "RES" || p.status === "CER").length;
+    const enProceso    = filtered.filter(p => p.status === "PRO").length;
+    const tasaResolucion = totalKPI > 0 ? Math.round((resueltas / totalKPI) * 100) : 0;
+
+    return { porEstado, porTipo, porPrioridad, tendencia, totalKPI, resueltas, enProceso, tasaResolucion };
+  }, [pqrsList, periodDays]);
+
+  const COLORS_ESTADO    = ["#3b82f6", "#f59e0b", "#22c55e", "#6b7280"];
+  const COLORS_TIPO      = ["#6366f1", "#ec4899", "#f97316", "#14b8a6", "#a855f7"];
+  const COLORS_PRIORIDAD = ["#22c55e", "#f59e0b", "#ef4444"];
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+        {label && <p className="font-semibold text-gray-700 mb-1">{label}</p>}
+        {payload.map((p: any, i: number) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ background: p.color ?? p.fill }} />
+            <span className="text-gray-600">{p.name}:</span>
+            <span className="font-bold text-gray-900">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -302,7 +436,144 @@ export function AreaDashboard() {
                 <LayoutDashboard className="w-4 h-4 mr-1.5" /> Panel Administración
               </Button>
             )}
+            {/* Botón de analytics */}
+            <button
+              onClick={() => setViewMode(v => v === "list" ? "analytics" : "list")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                viewMode === "analytics"
+                  ? "bg-blue-600 text-white shadow"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {viewMode === "analytics"
+                ? <><Building2 className="w-4 h-4" /> Ver PQRS</>
+                : <><BarChart2 className="w-4 h-4" /> Ver Gráficas</>}
+            </button>
+
+            {/* Botón de exportación de reportes del área */}
+            <button
+              onClick={() => setShowExport(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                showExport
+                  ? "bg-emerald-600 text-white shadow"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <FileDown className="w-4 h-4" />
+              Exportar
+              <ChevronDown className={`w-3 h-3 transition-transform ${showExport ? "rotate-180" : ""}`} />
+            </button>
           </div>
+
+          {/* ── Panel de exportación de reportes del área ───────────────── */}
+          {showExport && (
+            <div className="animate-slide-down-fade mt-3 bg-white border border-emerald-200 rounded-xl shadow-sm p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-semibold text-gray-800">Exportar Reporte del Área</span>
+                <span className="ml-auto text-xs text-gray-400">Filtros opcionales</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+                {/* Estado */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Estado</label>
+                  <select
+                    value={exportFilters.status ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, status: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  >
+                    <option value="">Todos</option>
+                    <option value="RAD">Radicado</option>
+                    <option value="PRO">En Proceso</option>
+                    <option value="RES">Resuelto</option>
+                    <option value="CER">Cerrado</option>
+                  </select>
+                </div>
+
+                {/* Tipo */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+                  <select
+                    value={exportFilters.type ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, type: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  >
+                    <option value="">Todos</option>
+                    <option value="P">Petición</option>
+                    <option value="Q">Queja</option>
+                    <option value="R">Reclamo</option>
+                    <option value="S">Sugerencia</option>
+                    <option value="F">Felicitación</option>
+                  </select>
+                </div>
+
+                {/* Prioridad */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Prioridad</label>
+                  <select
+                    value={exportFilters.priority ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, priority: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  >
+                    <option value="">Todas</option>
+                    <option value="LOW">Baja</option>
+                    <option value="MED">Media</option>
+                    <option value="HIGH">Alta</option>
+                  </select>
+                </div>
+
+                {/* Desde */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    value={exportFilters.date_from ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, date_from: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+
+                {/* Hasta */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    value={exportFilters.date_to ?? ""}
+                    onChange={e => setExportFilters(f => ({ ...f, date_to: e.target.value || undefined }))}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleExport("csv")}
+                  disabled={exporting !== null}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                >
+                  {exporting === "csv" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                  Descargar CSV
+                </button>
+
+                <button
+                  onClick={() => handleExport("excel")}
+                  disabled={exporting !== null}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                >
+                  {exporting === "excel" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+                  Descargar Excel
+                </button>
+
+                <button
+                  onClick={() => setExportFilters({})}
+                  className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> Limpiar filtros
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ====================================================
@@ -311,7 +582,7 @@ export function AreaDashboard() {
             y cerradas/resueltas.
         ==================================================== */}
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8" onClick={() => viewMode === "analytics" && setViewMode("list")}>
           {[
             { icon: FileText, label: "Total asignadas", value: total, color: "text-blue-600" },
             { icon: AlertCircle, label: "Radicadas", value: rad, color: "text-blue-500" },
@@ -331,11 +602,297 @@ export function AreaDashboard() {
         </div>
 
         {/* ====================================================
+            VISTA ANALYTICS: gráficas del área
+        ==================================================== */}
+        {viewMode === "analytics" && (
+          <div className="animate-fade-slide-up mb-8 space-y-6">
+
+            {/* Filtro de período */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Período:</span>
+              {[
+                { label: "7 días",  days: 7  },
+                { label: "30 días", days: 30 },
+                { label: "90 días", days: 90 },
+                { label: "Todo",    days: 0  },
+              ].map(opt => (
+                <button
+                  key={opt.days}
+                  onClick={() => setPeriodDays(opt.days)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    periodDays === opt.days
+                      ? "bg-blue-600 text-white"
+                      : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <button
+                onClick={cargarPQRS}
+                disabled={loading}
+                className="ml-auto flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Actualizar
+              </button>
+            </div>
+
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Total en período",     value: analyticsData.totalKPI,           icon: FileText,    color: "text-blue-600",   bg: "bg-blue-50"   },
+                { label: "Resueltas / Cerradas",  value: analyticsData.resueltas,          icon: CheckCircle2,color: "text-green-600",  bg: "bg-green-50"  },
+                { label: "En Proceso",            value: analyticsData.enProceso,          icon: Clock,       color: "text-yellow-600", bg: "bg-yellow-50" },
+                { label: "Tasa de Resolución",    value: `${analyticsData.tasaResolucion}%`, icon: Target,    color: "text-purple-600", bg: "bg-purple-50" },
+              ].map(({ label, value, icon: Icon, color, bg }, idx) => (
+                <div
+                  key={label}
+                  className="animate-fade-slide-up bg-white rounded-xl border shadow-sm p-4 flex items-center gap-3"
+                  style={{ animationDelay: `${idx * 55}ms` }}
+                >
+                  <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon className={`w-5 h-5 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{value}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Fila 1: Estado + Tipo */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+              {/* Dona interactiva: por estado */}
+              <div className="bg-white rounded-xl border shadow-sm p-5">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-gray-700">Distribución por Estado</p>
+                  <span className="text-xs text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">
+                    {analyticsData.totalKPI} PQRS
+                  </span>
+                </div>
+
+                {analyticsData.porEstado.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                ) : (() => {
+                  const totalEstado = analyticsData.porEstado.reduce((s, d) => s + d.value, 0);
+                  const active = activeEstadoIndex !== undefined ? analyticsData.porEstado[activeEstadoIndex] : null;
+
+                  const renderActiveShape = (props: any) => {
+                    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+                    return (
+                      <g>
+                        <Sector cx={cx} cy={cy} innerRadius={innerRadius - 4} outerRadius={outerRadius + 10}
+                          startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={1}
+                          style={{ filter: `drop-shadow(0 0 6px ${fill}99)` }}
+                        />
+                        <Sector cx={cx} cy={cy} innerRadius={outerRadius + 14} outerRadius={outerRadius + 17}
+                          startAngle={startAngle} endAngle={endAngle} fill={fill} opacity={0.5}
+                        />
+                      </g>
+                    );
+                  };
+
+                  return (
+                    <div className="flex flex-col gap-4">
+                      <div className="relative">
+                        <ResponsiveContainer width="100%" height={210}>
+                          <PieChart>
+                            <Pie
+                              data={analyticsData.porEstado}
+                              cx="50%" cy="50%"
+                              innerRadius={60} outerRadius={88}
+                              paddingAngle={3}
+                              dataKey="value"
+                              activeIndex={activeEstadoIndex}
+                              activeShape={renderActiveShape}
+                              onMouseEnter={(_, index) => setActiveEstadoIndex(index)}
+                              onMouseLeave={() => setActiveEstadoIndex(undefined)}
+                              animationBegin={0} animationDuration={700}
+                            >
+                              {analyticsData.porEstado.map((_, i) => (
+                                <Cell
+                                  key={i}
+                                  fill={COLORS_ESTADO[i % COLORS_ESTADO.length]}
+                                  opacity={activeEstadoIndex === undefined || activeEstadoIndex === i ? 1 : 0.4}
+                                  style={{ cursor: "pointer", transition: "opacity .2s" }}
+                                />
+                              ))}
+                            </Pie>
+                            <RTooltip
+                              content={({ active: a, payload }) => {
+                                if (!a || !payload?.length) return null;
+                                const d = payload[0];
+                                const pct = totalEstado > 0 ? ((d.value as number) / totalEstado * 100).toFixed(1) : "0";
+                                return (
+                                  <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color as string }} />
+                                      <span className="font-semibold text-gray-800">{d.name}</span>
+                                    </div>
+                                    <div className="flex gap-3 pl-4 text-gray-600">
+                                      <span><span className="font-bold text-gray-900">{d.value}</span> PQRS</span>
+                                      <span className="text-gray-400">·</span>
+                                      <span className="font-bold" style={{ color: d.color as string }}>{pct}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          {active ? (
+                            <>
+                              <span className="text-2xl font-extrabold leading-none"
+                                style={{ color: COLORS_ESTADO[activeEstadoIndex! % COLORS_ESTADO.length] }}>
+                                {active.value}
+                              </span>
+                              <span className="text-xs text-gray-500 mt-0.5 font-medium">{active.name}</span>
+                              <span className="text-[11px] text-gray-400">
+                                {totalEstado > 0 ? ((active.value / totalEstado) * 100).toFixed(1) : 0}%
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-2xl font-extrabold text-gray-800 leading-none">{totalEstado}</span>
+                              <span className="text-xs text-gray-400 mt-0.5">Total PQRS</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-1">
+                        {analyticsData.porEstado.map((d, i) => {
+                          const color = COLORS_ESTADO[i % COLORS_ESTADO.length];
+                          const pct = totalEstado > 0 ? (d.value / totalEstado) * 100 : 0;
+                          const isHovered = activeEstadoIndex === i;
+                          return (
+                            <button
+                              key={d.key ?? d.name}
+                              onMouseEnter={() => setActiveEstadoIndex(i)}
+                              onMouseLeave={() => setActiveEstadoIndex(undefined)}
+                              className={`text-left rounded-lg px-2 py-1.5 transition-all ${
+                                isHovered ? "bg-gray-50 scale-[1.02]" : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                                  <span className={`text-xs font-medium ${isHovered ? "text-gray-900" : "text-gray-600"}`}>
+                                    {d.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-bold" style={{ color }}>{d.value}</span>
+                              </div>
+                              <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${pct}%`, background: color }} />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Barras: por tipo */}
+              <div className="bg-white rounded-xl border shadow-sm p-4">
+                <p className="text-sm font-semibold text-gray-700 mb-4">Solicitudes por Tipo</p>
+                {analyticsData.porTipo.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={analyticsData.porTipo} barSize={32} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <RTooltip content={<CustomTooltip />} />
+                      <Bar dataKey="value" name="Cantidad" radius={[4, 4, 0, 0]}>
+                        {analyticsData.porTipo.map((_, i) => (
+                          <Cell key={i} fill={COLORS_TIPO[i % COLORS_TIPO.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* Fila 2: Tendencia diaria */}
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-4">
+                Tendencia de Radicación
+                <span className="font-normal text-gray-400 ml-2">
+                  (últimos {periodDays > 0 ? periodDays : 90} días)
+                </span>
+              </p>
+              {analyticsData.tendencia.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">Sin datos en el período seleccionado</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={analyticsData.tendencia} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="areaGradTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="areaGradRes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 10 }} tickFormatter={v => v.slice(5)} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <RTooltip content={<CustomTooltip />} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="total"     name="Radicadas" stroke="#3b82f6" strokeWidth={2} fill="url(#areaGradTotal)" dot={false} />
+                    <Area type="monotone" dataKey="resueltas" name="Resueltas"  stroke="#22c55e" strokeWidth={2} fill="url(#areaGradRes)"   dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Fila 3: Prioridad */}
+            <div className="bg-white rounded-xl border shadow-sm p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-4">Distribución por Prioridad</p>
+              {analyticsData.porPrioridad.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">Sin datos</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={analyticsData.porPrioridad}
+                      cx="50%" cy="50%"
+                      outerRadius={80}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      labelLine={false}
+                    >
+                      {analyticsData.porPrioridad.map((_, i) => (
+                        <Cell key={i} fill={COLORS_PRIORIDAD[i % COLORS_PRIORIDAD.length]} />
+                      ))}
+                    </Pie>
+                    <RTooltip content={<CustomTooltip />} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* ====================================================
             CUERPO PRINCIPAL: lista de PQRS + panel de detalle
             Layout de dos columnas en escritorio (lg+);
             en móvil se alterna entre lista y detalle.
         ==================================================== */}
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div key={viewMode === "list" ? "list" : "list-hidden"} className={`flex flex-col lg:flex-row gap-6 ${viewMode === "analytics" ? "hidden" : "animate-fade-slide-up"}`}>
           {/* ---- LISTA DE PQRS con filtro por estado ---- */}
           <div className={`flex-1 ${selected ? "hidden lg:block" : "block"}`}>
             <Card className="border-0 shadow-sm">
