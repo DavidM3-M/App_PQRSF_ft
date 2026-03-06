@@ -207,7 +207,11 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
     if (!encargadosAreaId) return;
     try {
       await apiAssignManager(encargadosAreaId, userId);
+      // Sincronizar el campo dependency del perfil del usuario para que el frontend
+      // detecte el rol "area" correctamente al iniciar sesión.
+      await apiUpdateUser(userId, { dependency: encargadosAreaId });
       toast.success("Encargado asignado correctamente");
+      await cargarDatos();
       await handleOpenEncargados(encargadosAreaId);
     } catch (e) {
       toast.error("Error al asignar encargado", { description: formatApiError(e) });
@@ -218,8 +222,25 @@ export function GestionAreas({ onClose }: { onClose?: () => void } = {}) {
     if (!encargadosAreaId) return;
     if (!confirm("¿Desactivar este encargado del área?")) return;
     try {
+      // Obtener el userId del manager antes de desactivarlo
+      const targetManager = managers.find(m => m.id === managerId);
+      const targetUserId = targetManager ? managerUserId(targetManager) : null;
+
       await apiRemoveManager(encargadosAreaId, managerId);
+
+      // Si el usuario ya no tiene ningún manager activo en esta área,
+      // limpiar su campo dependency para que pierda el rol "area".
+      if (targetUserId) {
+        const remaining = managers.filter(
+          m => m.id !== managerId && m.is_active && managerUserId(m) === targetUserId
+        );
+        if (remaining.length === 0) {
+          await apiUpdateUser(targetUserId, { dependency: null });
+        }
+      }
+
       toast.success("Encargado desactivado");
+      await cargarDatos();
       await handleOpenEncargados(encargadosAreaId);
     } catch (e) {
       toast.error("Error al desactivar encargado", { description: formatApiError(e) });
