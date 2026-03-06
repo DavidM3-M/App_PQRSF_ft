@@ -569,6 +569,35 @@ export async function apiLogin(email: string, password: string): Promise<LoginRe
   return data;
 }
 
+/**
+ * Respuesta del endpoint de Google Sign-In del backend.
+ */
+export interface GoogleLoginResponse {
+  access: string;
+  refresh: string;
+  /** `true` si se creó una cuenta nueva con los datos del perfil de Google. */
+  created: boolean;
+}
+
+/**
+ * Autentica al usuario mediante el `credential` (id_token) emitido por Google Identity Services.
+ * El backend verifica el token con Google, crea la cuenta si no existe,
+ * y retorna un par de tokens JWT propios.
+ *
+ * @param credential - El `id_token` JWT del callback de Google Sign-In.
+ * @returns Objeto con `access`, `refresh` y `created`.
+ * @throws ApiError si el token de Google es inválido o el servidor no responde.
+ */
+export async function apiGoogleLogin(credential: string): Promise<GoogleLoginResponse> {
+  const data = await apiFetch<GoogleLoginResponse>(
+    "/api/users/auth/google/",
+    { method: "POST", body: JSON.stringify({ credential }) },
+    false,
+  );
+  tokens.set(data.access, data.refresh);
+  return data;
+}
+
 export interface RegisterPayload {
   email: string;
   username: string;

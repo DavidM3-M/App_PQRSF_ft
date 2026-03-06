@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import {
   apiLogin,
+  apiGoogleLogin,
   apiGetPerfil,
   tokens,
   UsuarioAPI,
@@ -129,6 +130,7 @@ interface AuthContextType {
   usuario: Usuario | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; error?: string; created?: boolean }>;
   logout: () => void;
   refreshPerfil: () => Promise<void>;
   isAuthenticated: boolean;
@@ -254,6 +256,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  /**
+   * Inicia sesión con Google Identity Services.
+   *
+   * Flujo:
+   *  1. Llama a `apiGoogleLogin` con el `credential` (id_token de Google).
+   *  2. Llama a `apiGetPerfil` para obtener rol y dependencia del usuario.
+   *
+   * @param credential - El id_token JWT del callback de Google Sign-In.
+   * @returns `{ ok: true, created }` si fue exitoso, `{ ok: false, error }` si hubo un error.
+   */
+  const loginWithGoogle = useCallback(async (credential: string) => {
+    try {
+      const googleData = await apiGoogleLogin(credential);
+      const perfil = await apiGetPerfil();
+      const mergedRoles: string[] = perfil.roles ?? [];
+      const mapped = mapApiUser({ ...perfil, roles: mergedRoles });
+      setUsuario(mapped);
+      localStorage.setItem("usuario", JSON.stringify(mapped));
+      return { ok: true, created: googleData.created };
+    } catch (err) {
+      return { ok: false, error: formatApiError(err) };
+    }
+  }, []);
+
   /** Cierra la sesión: limpia el estado React y elimina todos los datos de localStorage. */
   const logout = useCallback(() => {
     setUsuario(null);
@@ -282,6 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         usuario,
         loading,
         login,
+        loginWithGoogle,
         logout,
         refreshPerfil,
         isAuthenticated: !!usuario,

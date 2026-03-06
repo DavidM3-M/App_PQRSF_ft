@@ -8,6 +8,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { LogIn, Eye, EyeOff } from "lucide-react";
+import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 
 interface LoginForm {
   email: string;
@@ -15,7 +16,7 @@ interface LoginForm {
 }
 
 export function Login() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +41,32 @@ export function Login() {
     } else {
       toast.error("Error de autenticación", {
         description: result.error ?? "Correo o contraseña incorrectos",
+      });
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      toast.error("Error con Google", { description: "No se recibió el token de Google" });
+      return;
+    }
+    setIsLoading(true);
+    const result = await loginWithGoogle(credentialResponse.credential);
+    setIsLoading(false);
+
+    if (result.ok) {
+      if (result.created) {
+        toast.success("¡Cuenta creada!", { description: "Se registró una nueva cuenta con tu cuenta de Google" });
+      } else {
+        toast.success("¡Bienvenido!", { description: "Sesión iniciada con Google" });
+      }
+      const usuario = JSON.parse(localStorage.getItem("usuario") || "{}");
+      if (usuario.rol === "admin") navigate("/admin");
+      else if (usuario.rol === "area") navigate("/area");
+      else navigate("/dashboard");
+    } else {
+      toast.error("Error con Google", {
+        description: result.error ?? "No se pudo iniciar sesión con Google",
       });
     }
   };
@@ -114,7 +141,29 @@ export function Login() {
               {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </Button>
           </form>
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-gray-400">o continua con</span>
+            </div>
+          </div>
 
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => {
+                toast.error("Error con Google", { description: "No se pudo conectar con Google" });
+              }}
+              useOneTap
+              locale="es"
+              text="signin_with"
+              shape="rectangular"
+              theme="outline"
+              width="368"
+            />
+          </div>
           <div className="mt-6 text-center text-sm">
             <p className="text-gray-600">
               ¿No tiene cuenta?{" "}

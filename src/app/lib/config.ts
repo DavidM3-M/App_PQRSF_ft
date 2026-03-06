@@ -17,3 +17,13 @@
  */
 export const CAPTCHA_DISABLED =
   import.meta.env.VITE_DISABLE_CAPTCHA === "true";
+
+/**
+ * Client ID de Google OAuth 2.0.
+ *
+ * Se lee de la variable de entorno VITE_GOOGLE_CLIENT_ID.
+ * Configúrela en el archivo .env.local:
+ *   VITE_GOOGLE_CLIENT_ID=xxxxxxxxxxxx.apps.googleusercontent.com
+ */
+export const GOOGLE_CLIENT_ID =
+  import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
