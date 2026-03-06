@@ -808,15 +808,26 @@ function normalizePqrsPublica(raw: Record<string, unknown>): PqrsAPI {
  * Consulta pública de una PQRS por número de radicado.
  * No requiere autenticación; cualquier ciudadano puede usarla.
  *
- * @param radicado - Número de radicado (ej. "PQRS-2026-0001").
+ * El backend (ConsultaRadicadoView) acepta ambos métodos:
+ *  - GET  /api/pqrs/consultar/?numero_radicado=X[&anon_email=Y]
+ *  - POST /api/pqrs/consultar/ { "numero_radicado": "X", "anon_email": "Y" }
+ *
+ * El campo de verificación se llama `anon_email` (no `email`), coincidiendo con
+ * el campo `anon_email` usado al radicar la PQRS de forma anónima.
+ * Se envía en minúsculas ya que el backend hace `.lower().strip()` al comparar.
+ *
+ * @param radicado  - Número de radicado (ej. "PQRS-20260306-XXXXXXXX").
+ * @param anonEmail - Correo de verificación; solo se envía cuando el backend lo exige.
  */
-export async function apiConsultarRadicado(radicado: string, email?: string) {
+export async function apiConsultarRadicado(radicado: string, anonEmail?: string) {
   const params = new URLSearchParams({ numero_radicado: radicado });
-  if (email) params.set("email", email);
+  if (anonEmail) {
+    params.set("anon_email", anonEmail.trim().toLowerCase());
+  }
   const raw = await apiFetch<Record<string, unknown>>(
     `/api/pqrs/consultar/?${params.toString()}`,
     {},
-    true, // enviar token si está disponible (el backend lo usa cuando existe)
+    true, // enviar token si está disponible
   );
   return normalizePqrsPublica(raw);
 }

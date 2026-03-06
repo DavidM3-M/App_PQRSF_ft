@@ -15,6 +15,7 @@ import {
   apiGetPQRS,
   apiGetResponses,
   formatApiError,
+  ApiError,
   PQRS_STATUS_LABEL,
   PQRS_TYPE_LABEL,
   type PqrsAPI,
@@ -31,10 +32,24 @@ interface EmailVerifForm {
   email: string;
 }
 
-/** Detecta si el error del backend indica que se requiere email para consultar. */
+/** Detecta si el error del backend indica que se requiere email para consultar.
+ * Escanea tanto el mensaje (data.detail) como todos los campos del body
+ * para cubrir las distintas formas en que el backend puede devolver este aviso:
+ *   - { "detail": "Debe proporcionar su correo electrónico..." }
+ *   - { "email": ["Se requiere correo para verificar identidad."] }
+ *   - { "error": "Email requerido" }
+ */
 function isEmailRequiredError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
-  return msg.includes("correo") || msg.includes("email");
+  if (err instanceof ApiError) {
+    // Serializar todo el objeto de error y buscar cualquier mención de correo/email
+    const full = JSON.stringify(err.data).toLowerCase();
+    return full.includes("correo") || full.includes("email") || full.includes("identidad");
+  }
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return msg.includes("correo") || msg.includes("email");
+  }
+  return false;
 }
 
 export function ConsultaRadicado() {
@@ -112,7 +127,18 @@ export function ConsultaRadicado() {
       setRequiresEmail(false);
       await loadResult(result);
     } catch (err) {
-      setEmailError("email", { message: "El correo no coincide con el registrado en esta PQRS." });
+      // Si el backend devuelve el mismo mensaje de "correo requerido" es porque
+      // el correo no coincide — mostrar un mensaje claro en lugar de repetir
+      // el aviso de "proporcione su correo" que ya se mostró al principio.
+      const isEmailMismatch = isEmailRequiredError(err);
+      const backendMsg = !isEmailMismatch && err instanceof ApiError
+        ? formatApiError(err)
+        : null;
+      setEmailError("email", {
+        message:
+          backendMsg ||
+          "El correo ingresado no coincide con el registrado para esta PQRS. Verifíquelo e intente de nuevo.",
+      });
     } finally {
       setIsVerifying(false);
     }
